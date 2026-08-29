@@ -35,26 +35,50 @@ def get_hourly_forecast(latitude, longitude) -> WeatherData:
 
     except requests.exceptions.HTTPError as error:
         # A response arrived, but its status was 4xx/5xx
-        raise WeatherClientError("HTTP_ERROR", f"Failed to fetch weather data: {response.status_code} - {response.text}", True) from error
+        raise WeatherClientError(
+            code="HTTP_ERROR",
+            message=f"Failed to fetch weather data: {response.status_code} - {response.text}",
+            retryable=True,
+        ) from error
     except requests.exceptions.Timeout as error:
         # No usable HTTP response arrived
-        raise WeatherClientError("TIMEOUT", "Request to weather API timed out", True) from error
+        raise WeatherClientError(
+            code="TIMEOUT",
+            message="Request to weather API timed out",
+            retryable=True,
+        ) from error
     except requests.exceptions.JSONDecodeError as error:
         # The response was not valid JSON
-        raise WeatherClientError("INVALID_JSON", "Failed to decode JSON response from weather API", False) from error
+        raise WeatherClientError(
+            code="INVALID_JSON",
+            message="Failed to decode JSON response from weather API",
+            retryable=False,
+        ) from error
 
     try:
         # Extract the first hourly observation from the payload. In the future, we may want to get the actual current hour, but for now, we just take the first one.
         temperature = payload["hourly"]["temperature_2m"][0]
         timestamp = payload["hourly"]["time"][0]
     except (KeyError, IndexError, TypeError) as error:
-        raise WeatherClientError("INVALID_PAYLOAD", "Weather API payload has an invalid structure.", False) from error
+        raise WeatherClientError(
+            code="INVALID_PAYLOAD",
+            message="Weather API payload has an invalid structure.",
+            retryable=False,
+        ) from error
 
     if isinstance(temperature, bool) or not isinstance(temperature, (float, int)):
-        raise WeatherClientError("INVALID_PAYLOAD", "Invalid temperature value received.", False)
+        raise WeatherClientError(
+            code="INVALID_PAYLOAD",
+            message="Invalid temperature value received.",
+            retryable=False,
+        )
 
     if not isinstance(timestamp, str) or not timestamp:
-        raise WeatherClientError("INVALID_PAYLOAD", "Invalid timestamp value received.", False)
+        raise WeatherClientError(
+            code="INVALID_PAYLOAD",
+            message="Invalid timestamp value received.",
+            retryable=False,
+        )
 
     return WeatherData(
         outside_temperature=temperature,

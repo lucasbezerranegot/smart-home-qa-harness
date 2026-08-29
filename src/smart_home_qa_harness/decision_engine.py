@@ -28,13 +28,25 @@ def decide_window_action(
 
     # Validate input types
     if isinstance(outside_temperature, bool) or not isinstance(outside_temperature, (float, int)):
-        raise DecisionEngineError("INVALID_INPUT", "Invalid outside temperature value received.", False)
+        raise DecisionEngineError(
+            code="INVALID_INPUT",
+            message="Invalid outside temperature value received.",
+            retryable=False,
+        )
 
     if isinstance(inside_temperature, bool) or not isinstance(inside_temperature, (float, int)):
-        raise DecisionEngineError("INVALID_INPUT", "Invalid inside temperature value received.", False)
+        raise DecisionEngineError(
+            code="INVALID_INPUT",
+            message="Invalid inside temperature value received.",
+            retryable=False,
+        )
 
     if not isinstance(current_time, time):
-        raise DecisionEngineError("INVALID_INPUT", "Invalid current time value received.", False)
+        raise DecisionEngineError(
+            code="INVALID_INPUT",
+            message="Invalid current time value received.",
+            retryable=False,
+        )
 
     # Determine if it's evening (between 18:00 and 23:00) or daytime (between 6:00 and 11:00)
     is_evening = time(18, 0) <= current_time <= time(23, 0)

@@ -7,3 +7,6 @@ build/
 dist/
 .coverage
 htmlcov/
+.env
+.env.*
+!.env.example
