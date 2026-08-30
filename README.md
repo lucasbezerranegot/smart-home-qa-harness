@@ -1,6 +1,6 @@
 # Smart Home QA Harness
 
-[![QA Pipeline](https://github.com/lucasbezerranegot/smart-home-qa-harnes/actions/workflows/qa_pipeline.yml/badge.svg)](https://github.com/lucasbezerranegot/smart-home-qa-harnes/actions/workflows/qa_pipeline.yml)
+[![QA Pipeline](https://github.com/lucasbezerranegot/smart-home-qa-harnes/actions/workflows/qa_pipeline.yml/badge.svg?branch=main)](https://github.com/lucasbezerranegot/smart-home-qa-harnes/actions/workflows/qa_pipeline.yml?query=branch%3Amain)
 
 A serverless-oriented Python 3.12 application that recommends window actions from outdoor and indoor environmental data. The project is designed as a QA automation portfolio: deterministic business rules, isolated HTTP clients, mocked external services, structured failures, branch coverage, and an automated CI quality gate.
 
