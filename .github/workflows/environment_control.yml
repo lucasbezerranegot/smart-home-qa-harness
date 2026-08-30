@@ -1,0 +1,55 @@
+name: Scheduled Environment Control
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    # Start near the beginning of each decision period.
+    # Europe/Berlin handles CET and CEST automatically.
+    - cron: "17 7 * * *"
+      timezone: "Europe/Berlin"
+
+    - cron: "17 19 * * *"
+      timezone: "Europe/Berlin"
+
+permissions:
+  contents: read
+
+# Prevent two environment-control runs from executing simultaneously.
+concurrency:
+  group: environment-control
+  cancel-in-progress: false
+
+jobs:
+  run-environment-control:
+    name: Evaluate home environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      WEATHER_LATITUDE: ${{ vars.WEATHER_LATITUDE }}
+      WEATHER_LONGITUDE: ${{ vars.WEATHER_LONGITUDE }}
+
+      SWITCHBOT_TOKEN: ${{ secrets.SWITCHBOT_TOKEN }}
+      SWITCHBOT_SECRET: ${{ secrets.SWITCHBOT_SECRET }}
+      SWITCHBOT_DEVICE_ID: ${{ secrets.SWITCHBOT_DEVICE_ID }}
+
+      VOICE_MONKEY_API_TOKEN: ${{ secrets.VOICE_MONKEY_API_TOKEN }}
+      VOICE_MONKEY_OPEN_DEVICE_ID: ${{ secrets.VOICE_MONKEY_OPEN_DEVICE_ID }}
+      VOICE_MONKEY_CLOSE_DEVICE_ID: ${{ secrets.VOICE_MONKEY_CLOSE_DEVICE_ID }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install application
+        run: python -m pip install .
+
+      - name: Run scheduled environment control
+        run: python scripts/run_scheduled_control.py
