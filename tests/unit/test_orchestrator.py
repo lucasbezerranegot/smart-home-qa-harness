@@ -19,7 +19,7 @@ from smart_home_qa_harness.webhook_notifier import WebhookError
 
 @patch("smart_home_qa_harness.orchestrator.send_window_action")
 @patch("smart_home_qa_harness.orchestrator.decide_window_action")
-@patch("smart_home_qa_harness.orchestrator.get_hourly_forecast")
+@patch("smart_home_qa_harness.orchestrator.get_current_weather")
 def test_orchestrates_open_windows_action(
     mock_get_forecast,
     mock_decide_action,
@@ -91,7 +91,7 @@ def test_orchestrates_open_windows_action(
 
 @patch("smart_home_qa_harness.orchestrator.send_window_action")
 @patch("smart_home_qa_harness.orchestrator.decide_window_action")
-@patch("smart_home_qa_harness.orchestrator.get_hourly_forecast")
+@patch("smart_home_qa_harness.orchestrator.get_current_weather")
 def test_no_action_does_not_send_webhook(
     mock_get_forecast,
     mock_decide_action,
@@ -144,7 +144,7 @@ def test_no_action_does_not_send_webhook(
 
 @patch("smart_home_qa_harness.orchestrator.send_window_action")
 @patch("smart_home_qa_harness.orchestrator.decide_window_action")
-@patch("smart_home_qa_harness.orchestrator.get_hourly_forecast")
+@patch("smart_home_qa_harness.orchestrator.get_current_weather")
 def test_weather_failure_does_not_send_webhook(
     mock_get_forecast,
     mock_decide_action,
@@ -189,7 +189,7 @@ def test_weather_failure_does_not_send_webhook(
 
 @patch("smart_home_qa_harness.orchestrator.send_window_action")
 @patch("smart_home_qa_harness.orchestrator.decide_window_action")
-@patch("smart_home_qa_harness.orchestrator.get_hourly_forecast")
+@patch("smart_home_qa_harness.orchestrator.get_current_weather")
 def test_switchbot_failure_does_not_send_webhook(
     mock_get_forecast,
     mock_decide_action,
@@ -244,7 +244,7 @@ def test_switchbot_failure_does_not_send_webhook(
 
 @patch("smart_home_qa_harness.orchestrator.send_window_action")
 @patch("smart_home_qa_harness.orchestrator.decide_window_action")
-@patch("smart_home_qa_harness.orchestrator.get_hourly_forecast")
+@patch("smart_home_qa_harness.orchestrator.get_current_weather")
 def test_webhook_failure_returns_unsent_result(
     mock_get_forecast,
     mock_decide_action,
@@ -333,7 +333,7 @@ def test_build_notification_key(action, expected_key):
 
 @patch("smart_home_qa_harness.orchestrator.send_window_action")
 @patch("smart_home_qa_harness.orchestrator.decide_window_action")
-@patch("smart_home_qa_harness.orchestrator.get_hourly_forecast")
+@patch("smart_home_qa_harness.orchestrator.get_current_weather")
 def test_duplicate_period_does_not_send_webhook(
     mock_get_forecast,
     mock_decide_action,
@@ -382,7 +382,7 @@ def test_duplicate_period_does_not_send_webhook(
 
 @patch("smart_home_qa_harness.orchestrator.send_window_action")
 @patch("smart_home_qa_harness.orchestrator.decide_window_action")
-@patch("smart_home_qa_harness.orchestrator.get_hourly_forecast")
+@patch("smart_home_qa_harness.orchestrator.get_current_weather")
 def test_same_period_sends_webhook_only_once(
     mock_get_forecast,
     mock_decide_action,

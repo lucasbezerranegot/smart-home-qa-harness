@@ -20,12 +20,13 @@ class WeatherClientError(Exception):
 BASE_URL = "https://api.open-meteo.com/v1/forecast"
 REQUEST_TIMEOUT_SECONDS = 3
 
-def get_hourly_forecast(latitude, longitude) -> WeatherData:
-    "Return the first hourly weather observation for the supplied coordinates."
+def get_current_weather(latitude, longitude) -> WeatherData:
+    """Return the current weather observation for the supplied coordinates."""
+
     params = {
         "latitude": latitude,
         "longitude": longitude,
-        "hourly": "temperature_2m"
+        "current": "temperature_2m",
     }
 
     try:
@@ -56,10 +57,10 @@ def get_hourly_forecast(latitude, longitude) -> WeatherData:
         ) from error
 
     try:
-        # Extract the first hourly observation from the payload. In the future, we may want to get the actual current hour, but for now, we just take the first one.
-        temperature = payload["hourly"]["temperature_2m"][0]
-        timestamp = payload["hourly"]["time"][0]
-    except (KeyError, IndexError, TypeError) as error:
+        # Extract the current observation returned by Open-Meteo.
+        temperature = payload["current"]["temperature_2m"]
+        timestamp = payload["current"]["time"]
+    except (KeyError, TypeError) as error:
         raise WeatherClientError(
             code="INVALID_PAYLOAD",
             message="Weather API payload has an invalid structure.",

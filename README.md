@@ -23,6 +23,12 @@ flowchart LR
 
 External HTTP behavior is kept separate from business logic. Tests can therefore simulate timeouts, malformed responses, HTTP errors, and device failures without contacting real services.
 
+## Engineering decision: Alexa to SwitchBot
+
+The initial plan was to reuse the temperature sensor already available through an Echo device. During discovery, that route did not provide a suitable public integration path for reading the sensor from this Python application. Instead of coupling the project to an unofficial workaround, the MVP moved to a SwitchBot Hub Mini and Meter with a documented OpenAPI.
+
+That decision expanded the project beyond temperature: the Meter also supplies humidity, and the same ecosystem can support future winter ventilation rules and radiator-thermostat automation. It is an example of adapting architecture after validating a real integration constraint rather than hiding the constraint in a demo.
+
 ## Decision rules
 
 Time boundaries are inclusive.
@@ -87,6 +93,7 @@ The current store is an injected in-memory `set`. This demonstrates and tests th
 - 100% test pass rate required
 - GitHub Actions on pushes to `main` and pull requests
 - read-only real-device smoke test kept outside CI
+- opt-in end-to-end smoke test with an explicit interactive confirmation
 
 Current local result:
 
@@ -141,6 +148,38 @@ docker run --rm \
 
 The smoke test is intentionally excluded from CI because it requires secrets, internet access, and online hardware.
 
+## End-to-end Alexa smoke test
+
+The end-to-end script reads current Open-Meteo data and the real SwitchBot Meter, runs the decision engine, and can continue through Voice Monkey to an Alexa routine and phone notification.
+
+Its default mode is safe: it prints the real measurements and decision but does not enable a webhook trigger.
+
+```bash
+docker run --rm \
+  --env-file .env \
+  -v "$PWD:/app" \
+  -w /app \
+  python:3.12-slim \
+  sh -c "pip install -q -e . && python scripts/smoke_test_end_to_end.py"
+```
+
+The trigger path requires two explicit controls: `ALLOW_REAL_ALEXA_TRIGGER=true` and an interactive action-specific confirmation. A forced action is available only for connectivity testing outside the normal morning/evening decision periods:
+
+```bash
+docker run --rm -it \
+  --env-file .env \
+  --env ALLOW_REAL_ALEXA_TRIGGER=true \
+  --env SMOKE_FORCE_ACTION=OPEN_WINDOWS \
+  -v "$PWD:/app" \
+  -w /app \
+  python:3.12-slim \
+  sh -c "pip install -q -e . && python scripts/smoke_test_end_to_end.py"
+```
+
+The script then requires the operator to type the exact confirmation, for example `TRIGGER OPEN_WINDOWS`. Forced smoke actions do not modify or bypass the production decision engine; the override exists only in this manual script and is clearly reported in its output.
+
+The complete path has been manually verified against real hardware and services: Open-Meteo → SwitchBot Meter → decision engine → Voice Monkey → Alexa voice announcement and phone push notification. Real readings, credentials, and device identifiers are intentionally not stored in the repository.
+
 ## Project structure
 
 ```text
@@ -154,6 +193,7 @@ src/smart_home_qa_harness/
 
 tests/unit/                         # Deterministic unit tests and HTTP mocks
 scripts/smoke_test_switchbot.py     # Manual read-only hardware verification
+scripts/smoke_test_end_to_end.py    # Opt-in Alexa end-to-end verification
 .github/workflows/qa_pipeline.yml   # CI quality gate
 ```
 

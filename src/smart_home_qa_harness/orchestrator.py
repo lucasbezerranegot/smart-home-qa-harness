@@ -11,7 +11,7 @@ from smart_home_qa_harness.inside_environment_client import (
 )
 from smart_home_qa_harness.weather_client import (
     WeatherClientError,
-    get_hourly_forecast,
+    get_current_weather,
 )
 from smart_home_qa_harness.webhook_notifier import (
     WebhookError,
@@ -37,7 +37,7 @@ def run_environment_control(
     close_device_id: str,
 ) -> OrchestrationResult:
     try:
-        weather = get_hourly_forecast(
+        weather = get_current_weather(
             latitude=latitude,
             longitude=longitude,
         )
