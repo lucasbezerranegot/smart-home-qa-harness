@@ -1,6 +1,6 @@
 # Smart Home QA Harness
 
-[![QA Pipeline](https://github.com/lucasbezerranegot/smart-home-qa-harnes/actions/workflows/qa_pipeline.yml/badge.svg?branch=main)](https://github.com/lucasbezerranegot/smart-home-qa-harnes/actions/workflows/qa_pipeline.yml?query=branch%3Amain)
+[![QA Pipeline](https://github.com/lucasbezerranegot/smart-home-qa-harness/actions/workflows/qa_pipeline.yml/badge.svg?branch=main)](https://github.com/lucasbezerranegot/smart-home-qa-harness/actions/workflows/qa_pipeline.yml?query=branch%3Amain)
 
 A serverless-oriented Python 3.12 application that recommends window actions from outdoor and indoor environmental data. The project is designed as a QA automation portfolio: deterministic business rules, isolated HTTP clients, mocked external services, structured failures, branch coverage, and an automated CI quality gate.
 
@@ -119,6 +119,15 @@ API: AABBCCDDEEFF
 
 Never commit `.env`. It is ignored by Git; `.env.example` contains names and safe examples only.
 
+## Run the quality gate locally
+
+Install the development dependencies and run the tests with branch coverage:
+
+```bash
+python -m pip install -r requirements-dev.txt
+pytest --cov=smart_home_qa_harness --cov-report=term-missing
+```
+
 ## Run the quality gate with Docker
 
 Docker provides the required Python 3.12 runtime without changing the host Python installation:
@@ -199,12 +208,12 @@ scripts/smoke_test_end_to_end.py    # Opt-in Alexa end-to-end verification
 
 ## Current scope and roadmap
 
-The repository is a tested MVP and is serverless-oriented, but it is not yet deployed as a continuously running service.
+The repository is a tested MVP. GitHub Actions currently runs the environment control on a schedule, while the application remains designed for a future serverless deployment.
 
 Planned improvements:
 
 - persistent notification state for cold-start-safe deduplication;
-- scheduled serverless deployment;
+- migration of the scheduled control from GitHub Actions to a serverless deployment;
 - humidity-based winter ventilation rules;
 - structured logging and operational monitoring;
 - integration with the installed SwitchBot radiator thermostats.
