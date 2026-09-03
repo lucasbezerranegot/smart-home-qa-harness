@@ -8,18 +8,9 @@ The current MVP reads outdoor temperature from Open-Meteo, indoor temperature an
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    OM[Open-Meteo API] --> WC[Weather client]
-    SB[SwitchBot Meter] --> IC[Indoor environment client]
-    WC --> OR[Orchestrator]
-    IC --> OR
-    OR --> DE[Decision engine]
-    DE --> OR
-    OR --> DD[Period deduplication]
-    DD --> VM[Voice Monkey webhook]
-    VM --> AX[Alexa routine and phone notification]
-```
+![Architecture diagram for Smart Home QA Harness](docs/assets/smart-home-qa-architecture.png)
+
+The application runs in Docker and combines Open-Meteo outdoor data with indoor temperature and humidity from a SwitchBot Meter. API clients feed a deterministic decision engine protected by fail-safe guards; valid decisions can trigger Voice Monkey, Alexa routines, and mobile notifications. The QA suite covers mocked HTTP behavior, error paths, CI checks, and a real smoke test.
 
 External HTTP behavior is kept separate from business logic. Tests can therefore simulate timeouts, malformed responses, HTTP errors, and device failures without contacting real services.
 
