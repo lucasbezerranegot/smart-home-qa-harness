@@ -14,6 +14,9 @@ from smart_home_qa_harness.application import (
     load_application_config,
     run_application,
 )
+from smart_home_qa_harness.notification_store import (
+    FileNotificationStore,
+)
 
 
 def main() -> int:
@@ -29,15 +32,18 @@ def main() -> int:
         ZoneInfo("Europe/Berlin"),
     )
 
-    # This set only exists during the current GitHub Actions execution.
-    # Persistent deduplication will be added later with DynamoDB.
-    sent_notification_keys: set[str] = set()
+    notification_store = FileNotificationStore(
+        path=os.environ.get(
+            "NOTIFICATION_STATE_FILE",
+            ".state/notifications.json",
+        )
+    )
 
     result = run_application(
         config=config,
         current_datetime=current_datetime,
         nonce=str(uuid.uuid4()),
-        sent_notification_keys=sent_notification_keys,
+        reserve_notification=notification_store.reserve,
     )
 
     print(f"Execution time: {current_datetime.isoformat()}")

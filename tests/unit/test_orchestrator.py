@@ -26,7 +26,7 @@ def test_orchestrates_open_windows_action(
     mock_send_action,
 ):
     # Arrange
-    sent_notification_keys = set()
+    reserve_notification = Mock(return_value=True)
 
     mock_get_forecast.return_value = WeatherData(
         outside_temperature=18.0,
@@ -51,7 +51,7 @@ def test_orchestrates_open_windows_action(
         inside_environment_provider=mock_inside_provider,
         current_time=time(20, 0),
         current_date=date(2026, 8, 29),
-        sent_notification_keys=sent_notification_keys,
+        reserve_notification=reserve_notification,
         api_token="fake-token",
         open_device_id="fake-open-device",
         close_device_id="fake-close-device",
@@ -84,9 +84,9 @@ def test_orchestrates_open_windows_action(
 
     mock_inside_provider.assert_called_once_with()
 
-    assert sent_notification_keys == {
-        "2026-08-29:evening",
-    }
+    reserve_notification.assert_called_once_with(
+        "2026-08-29:evening"
+    )
 
 
 @patch("smart_home_qa_harness.orchestrator.send_window_action")
@@ -98,7 +98,7 @@ def test_no_action_does_not_send_webhook(
     mock_send_action,
 ):
     # Arrange
-    sent_notification_keys = set()
+    reserve_notification = Mock(return_value=True)
 
     mock_get_forecast.return_value = WeatherData(
         outside_temperature=24.0,
@@ -123,7 +123,7 @@ def test_no_action_does_not_send_webhook(
         inside_environment_provider=mock_inside_provider,
         current_time=time(14, 0),
         current_date=date(2026, 8, 29),
-        sent_notification_keys=sent_notification_keys,
+        reserve_notification=reserve_notification,
         api_token="fake-token",
         open_device_id="fake-open-device",
         close_device_id="fake-close-device",
@@ -140,7 +140,7 @@ def test_no_action_does_not_send_webhook(
     mock_send_action.assert_not_called()
     mock_inside_provider.assert_called_once_with()
 
-    assert sent_notification_keys == set()
+    reserve_notification.assert_not_called()
 
 @patch("smart_home_qa_harness.orchestrator.send_window_action")
 @patch("smart_home_qa_harness.orchestrator.decide_window_action")
@@ -151,7 +151,7 @@ def test_weather_failure_does_not_send_webhook(
     mock_send_action,
 ):
     # Arrange
-    sent_notification_keys = set()
+    reserve_notification = Mock(return_value=True)
 
     mock_get_forecast.side_effect = WeatherClientError(
         code="TIMEOUT",
@@ -167,7 +167,7 @@ def test_weather_failure_does_not_send_webhook(
         inside_environment_provider=mock_inside_provider,
         current_time=time(20, 0),
         current_date=date(2026, 8, 29),
-        sent_notification_keys=sent_notification_keys,
+        reserve_notification=reserve_notification,
         api_token="fake-token",
         open_device_id="fake-open-device",
         close_device_id="fake-close-device",
@@ -185,7 +185,7 @@ def test_weather_failure_does_not_send_webhook(
     mock_decide_action.assert_not_called()
     mock_send_action.assert_not_called()
 
-    assert sent_notification_keys == set()
+    reserve_notification.assert_not_called()
 
 @patch("smart_home_qa_harness.orchestrator.send_window_action")
 @patch("smart_home_qa_harness.orchestrator.decide_window_action")
@@ -196,7 +196,7 @@ def test_switchbot_failure_does_not_send_webhook(
     mock_send_action,
 ):
     # Arrange
-    sent_notification_keys = set()
+    reserve_notification = Mock(return_value=True)
 
     mock_get_forecast.return_value = WeatherData(
         outside_temperature=24.0,
@@ -218,7 +218,7 @@ def test_switchbot_failure_does_not_send_webhook(
         inside_environment_provider=mock_inside_provider,
         current_time=time(20, 0),
         current_date=date(2026, 8, 29),
-        sent_notification_keys=sent_notification_keys,
+        reserve_notification=reserve_notification,
         api_token="fake-token",
         open_device_id="fake-open-device",
         close_device_id="fake-close-device",
@@ -240,7 +240,7 @@ def test_switchbot_failure_does_not_send_webhook(
     mock_decide_action.assert_not_called()
     mock_send_action.assert_not_called()
 
-    assert sent_notification_keys == set()
+    reserve_notification.assert_not_called()
 
 @patch("smart_home_qa_harness.orchestrator.send_window_action")
 @patch("smart_home_qa_harness.orchestrator.decide_window_action")
@@ -251,7 +251,7 @@ def test_webhook_failure_returns_unsent_result(
     mock_send_action,
 ):
     # Arrange:
-    sent_notification_keys = set()
+    reserve_notification = Mock(return_value=True)
 
     # Both temperature providers succeed
     mock_get_forecast.return_value = WeatherData(
@@ -284,7 +284,7 @@ def test_webhook_failure_returns_unsent_result(
         inside_environment_provider=mock_inside_provider,
         current_time=time(20, 0),
         current_date=date(2026, 8, 29),
-        sent_notification_keys=sent_notification_keys,
+        reserve_notification=reserve_notification,
         api_token="fake-token",
         open_device_id="fake-open-device",
         close_device_id="fake-close-device",
@@ -304,7 +304,9 @@ def test_webhook_failure_returns_unsent_result(
         close_device_id="fake-close-device",
     )
 
-    assert sent_notification_keys == set()
+    reserve_notification.assert_called_once_with(
+        "2026-08-29:evening"
+    )
 
 @pytest.mark.parametrize(
     "action, expected_key",
@@ -355,9 +357,7 @@ def test_duplicate_period_does_not_send_webhook(
 
     mock_decide_action.return_value = WindowAction.OPEN_WINDOWS
 
-    sent_notification_keys = {
-        "2026-08-29:evening",
-    }
+    reserve_notification = Mock(return_value=False)
 
     result = run_environment_control(
         latitude=48.13,
@@ -365,7 +365,7 @@ def test_duplicate_period_does_not_send_webhook(
         inside_environment_provider=mock_inside_provider,
         current_date=date(2026, 8, 29),
         current_time=time(20, 0),
-        sent_notification_keys=sent_notification_keys,
+        reserve_notification=reserve_notification,
         api_token="fake-token",
         open_device_id="fake-open-device",
         close_device_id="fake-close-device",
@@ -379,6 +379,9 @@ def test_duplicate_period_does_not_send_webhook(
     )
 
     mock_send_action.assert_not_called()
+    reserve_notification.assert_called_once_with(
+        "2026-08-29:evening"
+    )
 
 @patch("smart_home_qa_harness.orchestrator.send_window_action")
 @patch("smart_home_qa_harness.orchestrator.decide_window_action")
@@ -404,7 +407,7 @@ def test_same_period_sends_webhook_only_once(
     )
 
     mock_decide_action.return_value = WindowAction.OPEN_WINDOWS
-    sent_notification_keys = set()
+    reserve_notification = Mock(side_effect=[True, False])
 
     arguments = {
         "latitude": 48.13,
@@ -412,7 +415,7 @@ def test_same_period_sends_webhook_only_once(
         "inside_environment_provider": mock_inside_provider,
         "current_date": date(2026, 8, 30),
         "current_time": time(20, 0),
-        "sent_notification_keys": sent_notification_keys,
+        "reserve_notification": reserve_notification,
         "api_token": "fake-token",
         "open_device_id": "fake-open-device",
         "close_device_id": "fake-close-device",
@@ -430,6 +433,4 @@ def test_same_period_sends_webhook_only_once(
     assert second_result.notification_suppressed is True
 
     mock_send_action.assert_called_once()
-    assert sent_notification_keys == {
-        "2026-08-30:evening",
-    }
+    assert reserve_notification.call_count == 2

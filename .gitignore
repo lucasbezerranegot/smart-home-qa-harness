@@ -7,6 +7,8 @@ build/
 dist/
 .coverage
 htmlcov/
+.aws-sam/
+.state/
 .env
 .env.*
 !.env.example

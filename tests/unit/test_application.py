@@ -7,7 +7,7 @@ orchestrator itself is mocked and therefore cannot call that provider.
 """
 
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -106,7 +106,7 @@ def test_run_application_connects_switchbot_to_orchestrator(
         0,
         tzinfo=timezone.utc,
     )
-    sent_notification_keys = set()
+    reserve_notification = Mock(return_value=True)
 
     expected_result = OrchestrationResult(
         action=WindowAction.OPEN_WINDOWS,
@@ -119,7 +119,7 @@ def test_run_application_connects_switchbot_to_orchestrator(
         config=config,
         current_datetime=current_datetime,
         nonce="fake-nonce",
-        sent_notification_keys=sent_notification_keys,
+        reserve_notification=reserve_notification,
     )
 
     # Assert: the application returns the orchestrator's structured result.
@@ -135,7 +135,7 @@ def test_run_application_connects_switchbot_to_orchestrator(
     assert call_arguments["longitude"] == 11.57
     assert call_arguments["current_date"] == current_datetime.date()
     assert call_arguments["current_time"].hour == 20
-    assert call_arguments["sent_notification_keys"] is sent_notification_keys
+    assert call_arguments["reserve_notification"] is reserve_notification
     assert call_arguments["api_token"] == "fake-voice-monkey-token"
     assert call_arguments["open_device_id"] == "fake-open-device"
     assert call_arguments["close_device_id"] == "fake-close-device"
