@@ -5,7 +5,7 @@ does not read a ``.env`` file itself; deployment environments provide values
 through ``os.environ`` (or another mapping supplied by the caller).
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -82,7 +82,7 @@ def run_application(
     config: ApplicationConfig,
     current_datetime: datetime,
     nonce: str,
-    sent_notification_keys: set[str],
+    reserve_notification: Callable[[str], bool],
 ) -> OrchestrationResult:
     """Wire one SwitchBot reading into one environment-control execution."""
 
@@ -109,7 +109,7 @@ def run_application(
         inside_environment_provider=inside_environment_provider,
         current_date=current_datetime.date(),
         current_time=current_datetime.time().replace(tzinfo=None),
-        sent_notification_keys=sent_notification_keys,
+        reserve_notification=reserve_notification,
         api_token=config.voice_monkey_api_token,
         open_device_id=config.voice_monkey_open_device_id,
         close_device_id=config.voice_monkey_close_device_id,

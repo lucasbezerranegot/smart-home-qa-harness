@@ -31,7 +31,7 @@ def run_environment_control(
     inside_environment_provider: Callable[[], IndoorEnvironmentData],
     current_date: date,
     current_time: time,
-    sent_notification_keys: set[str],
+    reserve_notification: Callable[[str], bool],
     api_token: str,
     open_device_id: str,
     close_device_id: str,
@@ -70,7 +70,7 @@ def run_environment_control(
 
     if (
         notification_key is not None
-        and notification_key in sent_notification_keys
+        and not reserve_notification(notification_key)
     ):
         return OrchestrationResult(
             action=action,
@@ -96,8 +96,6 @@ def run_environment_control(
             )
 
         webhook_sent = True
-        if notification_key is not None:
-            sent_notification_keys.add(notification_key)
 
     return OrchestrationResult(
         action=action,

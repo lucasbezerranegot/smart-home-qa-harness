@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless runtime for the Smart Home QA Harness MVP 2
+
+Parameters:
+  WeatherLatitude:
+    Type: String
+    Description: Latitude used by the Open-Meteo client
+
+  WeatherLongitude:
+    Type: String
+    Description: Longitude used by the Open-Meteo client
+
+  SwitchBotToken:
+    Type: String
+    NoEcho: true
+
+  SwitchBotSecret:
+    Type: String
+    NoEcho: true
+
+  SwitchBotDeviceId:
+    Type: String
+    NoEcho: true
+
+  VoiceMonkeyApiToken:
+    Type: String
+    NoEcho: true
+
+  VoiceMonkeyOpenDeviceId:
+    Type: String
+    NoEcho: true
+
+  VoiceMonkeyCloseDeviceId:
+    Type: String
+    NoEcho: true
+
+Resources:
+  NotificationTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: notification_key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: notification_key
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: false
+      SSESpecification:
+        SSEEnabled: true
+
+  EnvironmentControlFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      Dockerfile: Dockerfile.lambda
+      DockerContext: ..
+      DockerTag: python3.12-v1
+    Properties:
+      PackageType: Image
+      Architectures:
+        - x86_64
+      MemorySize: 256
+      Timeout: 30
+      Environment:
+        Variables:
+          WEATHER_LATITUDE: !Ref WeatherLatitude
+          WEATHER_LONGITUDE: !Ref WeatherLongitude
+          SWITCHBOT_TOKEN: !Ref SwitchBotToken
+          SWITCHBOT_SECRET: !Ref SwitchBotSecret
+          SWITCHBOT_DEVICE_ID: !Ref SwitchBotDeviceId
+          VOICE_MONKEY_API_TOKEN: !Ref VoiceMonkeyApiToken
+          VOICE_MONKEY_OPEN_DEVICE_ID: !Ref VoiceMonkeyOpenDeviceId
+          VOICE_MONKEY_CLOSE_DEVICE_ID: !Ref VoiceMonkeyCloseDeviceId
+          NOTIFICATION_TABLE_NAME: !Ref NotificationTable
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Sid: ReserveNotificationPeriod
+              Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource: !GetAtt NotificationTable.Arn
+      Events:
+        MorningRecurringSchedule:
+          Type: ScheduleV2
+          Properties:
+            Name: smart-home-environment-control-morning-recurring
+            Description: Evaluate morning rules every 30 minutes until 10:30
+            ScheduleExpression: cron(0/30 6-10 * * ? *)
+            ScheduleExpressionTimezone: Europe/Berlin
+            FlexibleTimeWindow:
+              Mode: "OFF"
+            State: ENABLED
+            Input: '{"period":"morning"}'
+            RetryPolicy:
+              MaximumEventAgeInSeconds: 900
+              MaximumRetryAttempts: 1
+
+        MorningBoundarySchedule:
+          Type: ScheduleV2
+          Properties:
+            Name: smart-home-environment-control-morning-boundary
+            Description: Evaluate morning rules at the inclusive 11:00 boundary
+            ScheduleExpression: cron(0 11 * * ? *)
+            ScheduleExpressionTimezone: Europe/Berlin
+            FlexibleTimeWindow:
+              Mode: "OFF"
+            State: ENABLED
+            Input: '{"period":"morning"}'
+            RetryPolicy:
+              MaximumEventAgeInSeconds: 900
+              MaximumRetryAttempts: 1
+
+        EveningRecurringSchedule:
+          Type: ScheduleV2
+          Properties:
+            Name: smart-home-environment-control-evening-recurring
+            Description: Evaluate evening rules every 30 minutes until 22:30
+            ScheduleExpression: cron(0/30 18-22 * * ? *)
+            ScheduleExpressionTimezone: Europe/Berlin
+            FlexibleTimeWindow:
+              Mode: "OFF"
+            State: ENABLED
+            Input: '{"period":"evening"}'
+            RetryPolicy:
+              MaximumEventAgeInSeconds: 900
+              MaximumRetryAttempts: 1
+
+        EveningBoundarySchedule:
+          Type: ScheduleV2
+          Properties:
+            Name: smart-home-environment-control-evening-boundary
+            Description: Evaluate evening rules at the inclusive 23:00 boundary
+            ScheduleExpression: cron(0 23 * * ? *)
+            ScheduleExpressionTimezone: Europe/Berlin
+            FlexibleTimeWindow:
+              Mode: "OFF"
+            State: ENABLED
+            Input: '{"period":"evening"}'
+            RetryPolicy:
+              MaximumEventAgeInSeconds: 900
+              MaximumRetryAttempts: 1
+
+Outputs:
+  FunctionName:
+    Description: Deployed Lambda function name
+    Value: !Ref EnvironmentControlFunction
+
+  NotificationTableName:
+    Description: DynamoDB table used for notification reservations
+    Value: !Ref NotificationTable

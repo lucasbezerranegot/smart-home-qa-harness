@@ -3,15 +3,6 @@ name: Scheduled Environment Control
 on:
   workflow_dispatch:
 
-  schedule:
-    # Start near the beginning of each decision period.
-    # Europe/Berlin handles CET and CEST automatically.
-    - cron: "17 7 * * *"
-      timezone: "Europe/Berlin"
-
-    - cron: "17 19 * * *"
-      timezone: "Europe/Berlin"
-
 permissions:
   contents: read
 
@@ -37,6 +28,7 @@ jobs:
       VOICE_MONKEY_API_TOKEN: ${{ secrets.VOICE_MONKEY_API_TOKEN }}
       VOICE_MONKEY_OPEN_DEVICE_ID: ${{ secrets.VOICE_MONKEY_OPEN_DEVICE_ID }}
       VOICE_MONKEY_CLOSE_DEVICE_ID: ${{ secrets.VOICE_MONKEY_CLOSE_DEVICE_ID }}
+      NOTIFICATION_STATE_FILE: .state/notifications.json
 
     steps:
       - name: Checkout repository
@@ -51,5 +43,22 @@ jobs:
       - name: Install application
         run: python -m pip install .
 
+      - name: Restore notification state
+        id: notification-state
+        uses: actions/cache/restore@v4
+        with:
+          path: .state/notifications.json
+          key: notification-state-${{ github.run_id }}
+          restore-keys: |
+            notification-state-
+
       - name: Run scheduled environment control
+        id: environment-control
         run: python scripts/run_scheduled_control.py
+
+      - name: Save notification state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .state/notifications.json
+          key: notification-state-${{ github.run_id }}

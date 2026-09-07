@@ -1,0 +1,14 @@
+FROM public.ecr.aws/lambda/python:3.12
+
+# Copy only the files required to install the application package.
+COPY pyproject.toml README.md ${LAMBDA_TASK_ROOT}/
+COPY src ${LAMBDA_TASK_ROOT}/src
+
+# Install the application and its pinned dependency ranges into the Lambda
+# task directory, which is the first location searched by the runtime.
+RUN pip install \
+    --no-cache-dir \
+    --target "${LAMBDA_TASK_ROOT}" \
+    "${LAMBDA_TASK_ROOT}"
+
+CMD ["smart_home_qa_harness.lambda_handler.lambda_handler"]
