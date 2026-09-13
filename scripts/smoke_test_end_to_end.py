@@ -38,6 +38,8 @@ inside = get_switchbot_indoor_environment(
 action = decide_window_action(
     outside_temperature=weather.outside_temperature,
     inside_temperature=inside.temperature,
+    daily_max_temperature=weather.daily_max_temperature,
+    relative_humidity=inside.relative_humidity,
     current_time=local_now.time().replace(tzinfo=None),
 )
 

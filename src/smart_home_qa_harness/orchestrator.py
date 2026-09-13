@@ -60,11 +60,14 @@ def run_environment_control(
     action = decide_window_action(
         outside_temperature=weather.outside_temperature,
         inside_temperature=inside_environment.temperature,
+        daily_max_temperature=weather.daily_max_temperature,
+        relative_humidity=inside_environment.relative_humidity,
         current_time=current_time,
     )
 
     notification_key = build_notification_key(
         current_date=current_date,
+        current_time=current_time,
         action=action,
     )
 
@@ -105,14 +108,17 @@ def run_environment_control(
 
 def build_notification_key(
     current_date: date,
+    current_time: time,
     action: WindowAction,
 ) -> str | None:
     if action is WindowAction.NO_ACTION:
         return None
 
-    if action is WindowAction.OPEN_WINDOWS:
+    if time(6, 0) <= current_time <= time(11, 0):
+        period = "morning"
+    elif time(18, 0) <= current_time <= time(23, 0):
         period = "evening"
     else:
-        period = "morning"
+        return None
 
     return f"{current_date.isoformat()}:{period}"

@@ -2,9 +2,6 @@
 
 import json
 from pathlib import Path
-from typing import Any
-
-from botocore.exceptions import ClientError
 
 
 class NotificationStoreError(Exception):
@@ -18,7 +15,7 @@ class NotificationStoreError(Exception):
 
 
 class FileNotificationStore:
-    """Persist notification keys in a JSON file between workflow runs."""
+    """Persist notification keys in a JSON file between container executions."""
 
     def __init__(self, path: str | Path):
         self._path = Path(path)
@@ -80,42 +77,3 @@ class FileNotificationStore:
                 message="Unable to persist notification state.",
                 retryable=True,
             ) from error
-
-
-class DynamoDBNotificationStore:
-    """Reserve notification-period keys in a DynamoDB table."""
-
-    def __init__(self, table: Any):
-        """Receive the DynamoDB table as an injected dependency."""
-        self._table = table
-
-    def reserve(
-        self,
-        notification_key: str,
-        expires_at: int,
-    ) -> bool:
-        """Return True only when this execution reserves a new key."""
-
-        try:
-            self._table.put_item(
-                Item={
-                    "notification_key": notification_key,
-                    "expires_at": expires_at,
-                },
-                ConditionExpression=(
-                    "attribute_not_exists(notification_key)"
-                ),
-            )
-        except ClientError as error:
-            error_code = (
-                error.response
-                .get("Error", {})
-                .get("Code")
-            )
-
-            if error_code == "ConditionalCheckFailedException":
-                return False
-
-            raise
-
-        return True

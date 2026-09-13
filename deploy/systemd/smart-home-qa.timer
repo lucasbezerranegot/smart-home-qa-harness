@@ -1,0 +1,13 @@
+[Unit]
+Description=Run Smart Home control every 30 minutes during ventilation periods
+
+[Timer]
+OnCalendar=*-*-* 06..10:00,30:00
+OnCalendar=*-*-* 18..22:00,30:00
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=0
+Unit=smart-home-qa.service
+
+[Install]
+WantedBy=timers.target

@@ -31,6 +31,7 @@ def test_orchestrates_open_windows_action(
     mock_get_forecast.return_value = WeatherData(
         outside_temperature=18.0,
         timestamp="2026-08-15T20:00",
+        daily_max_temperature=27.0,
     )
 
     mock_inside_provider = Mock(
@@ -72,6 +73,8 @@ def test_orchestrates_open_windows_action(
     mock_decide_action.assert_called_once_with(
         outside_temperature=18.0,
         inside_temperature=24.0,
+        daily_max_temperature=27.0,
+        relative_humidity=47.0,
         current_time=time(20, 0),
     )
 
@@ -103,6 +106,7 @@ def test_no_action_does_not_send_webhook(
     mock_get_forecast.return_value = WeatherData(
         outside_temperature=24.0,
         timestamp="2026-08-15T14:00",
+        daily_max_temperature=27.0,
     )
 
     mock_inside_provider = Mock(
@@ -201,6 +205,7 @@ def test_switchbot_failure_does_not_send_webhook(
     mock_get_forecast.return_value = WeatherData(
         outside_temperature=24.0,
         timestamp="2026-08-15T14:00",
+        daily_max_temperature=27.0,
     )
 
     mock_inside_provider = Mock(
@@ -257,6 +262,7 @@ def test_webhook_failure_returns_unsent_result(
     mock_get_forecast.return_value = WeatherData(
         outside_temperature=18.0,
         timestamp="2026-08-29T20:00",
+        daily_max_temperature=27.0,
     )
 
     mock_inside_provider = Mock(
@@ -309,25 +315,39 @@ def test_webhook_failure_returns_unsent_result(
     )
 
 @pytest.mark.parametrize(
-    "action, expected_key",
+    "action, current_time, expected_key",
     [
         (
             WindowAction.OPEN_WINDOWS,
+            time(8, 0),
+            "2026-08-29:morning",
+        ),
+        (
+            WindowAction.OPEN_WINDOWS,
+            time(20, 0),
             "2026-08-29:evening",
         ),
         (
             WindowAction.CLOSE_WINDOWS,
+            time(8, 0),
             "2026-08-29:morning",
         ),
         (
             WindowAction.NO_ACTION,
+            time(20, 0),
+            None,
+        ),
+        (
+            WindowAction.OPEN_WINDOWS,
+            time(14, 0),
             None,
         ),
     ],
 )
-def test_build_notification_key(action, expected_key):
+def test_build_notification_key(action, current_time, expected_key):
     result = build_notification_key(
         current_date=date(2026, 8, 29),
+        current_time=current_time,
         action=action,
     )
 
@@ -344,6 +364,7 @@ def test_duplicate_period_does_not_send_webhook(
     mock_get_forecast.return_value = WeatherData(
         outside_temperature=18.0,
         timestamp="2026-08-29T20:00",
+        daily_max_temperature=27.0,
     )
 
     mock_inside_provider = Mock(
@@ -395,6 +416,7 @@ def test_same_period_sends_webhook_only_once(
     mock_get_forecast.return_value = WeatherData(
         outside_temperature=18.0,
         timestamp="2026-08-30T20:00",
+        daily_max_temperature=27.0,
     )
 
     mock_inside_provider = Mock(

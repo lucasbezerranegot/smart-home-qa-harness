@@ -6,6 +6,7 @@ from dataclasses import dataclass
 class WeatherData:
     outside_temperature: float
     timestamp: str
+    daily_max_temperature: float
 
 
 class WeatherClientError(Exception):
@@ -27,6 +28,8 @@ def get_current_weather(latitude, longitude) -> WeatherData:
         "latitude": latitude,
         "longitude": longitude,
         "current": "temperature_2m",
+        "daily": "temperature_2m_max",
+        "timezone": "auto",
     }
 
     try:
@@ -60,7 +63,8 @@ def get_current_weather(latitude, longitude) -> WeatherData:
         # Extract the current observation returned by Open-Meteo.
         temperature = payload["current"]["temperature_2m"]
         timestamp = payload["current"]["time"]
-    except (KeyError, TypeError) as error:
+        daily_max_temperature = payload["daily"]["temperature_2m_max"][0]
+    except (KeyError, TypeError, IndexError) as error:
         raise WeatherClientError(
             code="INVALID_PAYLOAD",
             message="Weather API payload has an invalid structure.",
@@ -81,7 +85,18 @@ def get_current_weather(latitude, longitude) -> WeatherData:
             retryable=False,
         )
 
+    if (
+        isinstance(daily_max_temperature, bool)
+        or not isinstance(daily_max_temperature, (float, int))
+    ):
+        raise WeatherClientError(
+            code="INVALID_PAYLOAD",
+            message="Invalid daily maximum temperature received.",
+            retryable=False,
+        )
+
     return WeatherData(
         outside_temperature=temperature,
         timestamp=timestamp,
+        daily_max_temperature=float(daily_max_temperature),
     )
