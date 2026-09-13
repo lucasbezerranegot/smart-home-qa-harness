@@ -18,7 +18,10 @@ def test_get_current_weather_returns_weather_data_for_valid_response():
         "current": {
             "time": "2026-08-12T18:00",
             "temperature_2m": 19.5,
-        }
+        },
+        "daily": {
+            "temperature_2m_max": [22.5],
+        },
     }
 
     responses.add(
@@ -35,6 +38,7 @@ def test_get_current_weather_returns_weather_data_for_valid_response():
     assert isinstance(result, WeatherData)
     assert result.outside_temperature == 19.5
     assert result.timestamp == "2026-08-12T18:00"
+    assert result.daily_max_temperature == 22.5
 
     # Assert that the request was made with the correct parameters
     assert len(responses.calls) == 1
@@ -42,6 +46,8 @@ def test_get_current_weather_returns_weather_data_for_valid_response():
     assert "latitude=48.13" in request.url
     assert "longitude=11.57" in request.url
     assert "temperature_2m" in request.url
+    assert "daily=temperature_2m_max" in request.url
+    assert "timezone=auto" in request.url
 
 @responses.activate
 def test_get_current_weather_raises_timeout_error_for_timeout_response():
@@ -102,7 +108,14 @@ def test_get_current_weather_translates_http_200_with_missing_temperature_data()
     responses.add(
         responses.GET,
         url,
-        json={"current": {"time": "2026-08-12T18:00"}},
+        json={
+            "current": {
+                "time": "2026-08-12T18:00"
+            },
+            "daily": {
+                "temperature_2m_max": [22.5],
+            },
+        },
         status=200,
     )
 
@@ -119,7 +132,13 @@ def test_get_current_weather_translates_http_200_with_missing_time_data():
     responses.add(
         responses.GET,
         url,
-        json={"current": {"temperature_2m": 20.0}},
+        json={"current": {
+            "temperature_2m": 20.0
+            },
+            "daily": {
+                "temperature_2m_max": [22.5],
+            },
+        },
         status=200,
     )
 
@@ -153,7 +172,15 @@ def test_get_current_weather_translates_http_200_with_temperature_returning_warm
     responses.add(
         responses.GET,
         url,
-        json={"current": {"time": "2026-08-12T18:00", "temperature_2m": "warm"}},
+        json={
+            "current": {
+                "time": "2026-08-12T18:00",
+                "temperature_2m": "warm"
+            },
+            "daily": {
+                "temperature_2m_max": [22.5],
+            },
+        },
         status=200,
     )
 
@@ -170,7 +197,15 @@ def test_get_current_weather_translates_http_200_with_timestamp_returning_numeri
     responses.add(
         responses.GET,
         url,
-        json={"current": {"time": 1234567890, "temperature_2m": 20.0}},
+        json={
+            "current": {
+                "time": 1234567890,
+                "temperature_2m": 20.0
+            },
+            "daily": {
+                "temperature_2m_max": [22.5],
+            },
+        },
         status=200,
     )
 
@@ -193,7 +228,10 @@ def test_get_current_weather_accepts_valid_numeric_temperatures(temperature):
         "current": {
             "time": "2026-08-12T18:00",
             "temperature_2m": temperature,
-        }
+            },
+            "daily": {
+                "temperature_2m_max": [22.5],
+            },
     }
 
     responses.add(
@@ -224,7 +262,10 @@ def test_get_current_weather_rejects_invalid_temperature_values(temperature):
             "current": {
                 "time": "2026-08-12T18:00",
                 "temperature_2m": temperature,
-            }
+            },
+            "daily": {
+                "temperature_2m_max": [22.5],
+            },
         },
         status=200,
     )
@@ -232,6 +273,40 @@ def test_get_current_weather_rejects_invalid_temperature_values(temperature):
     # Act & Assert
     with pytest.raises(WeatherClientError) as captured:
         get_current_weather(48.13, 11.57)
+
+    assert captured.value.code == "INVALID_PAYLOAD"
+    assert captured.value.retryable is False
+
+@responses.activate
+@pytest.mark.parametrize(
+    "daily_max_values",
+    [
+        [],
+        [None],
+        ["warm"],
+        [True],
+    ],
+)
+def test_rejects_invalid_daily_maximum_temperature(daily_max_values):
+    # Arrange
+    responses.add(
+        responses.GET,
+        url,
+        json={
+            "current": {
+                "temperature_2m": 18.5,
+                "time": "2026-09-08T08:00",
+            },
+            "daily": {
+                "temperature_2m_max": daily_max_values,
+            },
+        },
+        status=200,
+    )
+
+    # Act & Asserts
+    with pytest.raises(WeatherClientError) as captured:
+        get_current_weather(latitude=48.13, longitude=11.57)
 
     assert captured.value.code == "INVALID_PAYLOAD"
     assert captured.value.retryable is False

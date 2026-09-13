@@ -2,15 +2,25 @@
 
 [![QA Pipeline](https://github.com/lucasbezerranegot/smart-home-qa-harness/actions/workflows/qa_pipeline.yml/badge.svg?branch=main)](https://github.com/lucasbezerranegot/smart-home-qa-harness/actions/workflows/qa_pipeline.yml?query=branch%3Amain)
 
-A serverless-oriented Python 3.12 application that recommends window actions from outdoor and indoor environmental data. The project is designed as a QA automation portfolio: deterministic business rules, isolated HTTP clients, mocked external services, structured failures, branch coverage, and an automated CI quality gate.
+A containerized Python 3.12 application that recommends window actions from outdoor and indoor environmental data. The project is designed as a QA automation portfolio: deterministic business rules, isolated HTTP clients, mocked external services, structured failures, branch coverage, and an automated CI quality gate.
 
-The current MVP reads outdoor temperature from Open-Meteo, indoor temperature and humidity from a SwitchBot Meter, evaluates ventilation rules, and can trigger Alexa routines through Voice Monkey.
+The current MVP reads outdoor temperature and today's forecast maximum from Open-Meteo, indoor temperature and humidity from a SwitchBot Meter, evaluates warm-day or humidity-based ventilation rules, and can trigger Alexa routines through Voice Monkey. A Linux systemd user timer runs a short-lived Docker container every 30 minutes during the morning and evening periods.
 
 ## Architecture
 
 ![Architecture diagram for Smart Home QA Harness](docs/assets/smart-home-qa-architecture.png)
 
 The application runs in Docker and combines Open-Meteo outdoor data with indoor temperature and humidity from a SwitchBot Meter. API clients feed a deterministic decision engine protected by fail-safe guards; valid decisions can trigger Voice Monkey, Alexa routines, and mobile notifications. The QA suite covers mocked HTTP behavior, error paths, CI checks, and a real smoke test.
+
+The diagram shows the core data flow. The deployment adds a systemd timer and host-mounted persistent notification state:
+
+```text
+systemd user timer → Docker → Open-Meteo + SwitchBot → decision engine
+                                                       ↓
+                             host JSON reservation → Voice Monkey → Alexa + phone
+```
+
+GitHub Actions runs QA only; it is not the production scheduler. AWS/Lambda/DynamoDB experimental adapters were removed to keep the published implementation aligned with the actual deployment. The current deployment is self-hosted, not serverless, and requires the PC, Docker daemon, and internet connection to be available.
 
 External HTTP behavior is kept separate from business logic. Tests can therefore simulate timeouts, malformed responses, HTTP errors, and device failures without contacting real services.
 
@@ -22,24 +32,27 @@ That decision expanded the project beyond temperature: the Meter also supplies h
 
 ## Decision rules
 
-Time boundaries are inclusive.
+Time boundaries are inclusive. The mode is selected from today's forecast maximum, not from the calendar season. Thresholds are module-level constants: 24°C for a warm day and 60% indoor relative humidity for cool-day ventilation.
 
-| Period | Condition | Result |
-|---|---|---|
-| 18:00–23:00 | Outside temperature is lower than inside | `OPEN_WINDOWS` |
-| 06:00–11:00 | Outside temperature is greater than or equal to inside | `CLOSE_WINDOWS` |
-| 06:00–11:00 | Outside temperature is at least 24°C | `CLOSE_WINDOWS` |
-| Any other scenario | No rule matches | `NO_ACTION` |
+| Mode | Period | Condition | Result |
+|---|---|---|---|
+| Warm day: maximum ≥ 24°C | 18:00–23:00 | Inside > 24°C AND outside < inside | `OPEN_WINDOWS` |
+| Warm day: maximum ≥ 24°C | 06:00–11:00 | Outside ≥ inside OR outside ≥ 24°C | `CLOSE_WINDOWS` |
+| Cool day: maximum < 24°C | Morning or evening | Indoor humidity ≥ 60% | `OPEN_WINDOWS` |
+| Either mode | Any other scenario | No rule matches | `NO_ACTION` |
 
 Examples:
 
-| Scenario | Time | Outside | Inside | Expected action |
-|---|---:|---:|---:|---|
-| Evening cooling | 20:00 | 18°C | 24°C | `OPEN_WINDOWS` |
-| Equal evening temperatures | 20:00 | 24°C | 24°C | `NO_ACTION` |
-| Outside warmer in morning | 10:00 | 23°C | 22°C | `CLOSE_WINDOWS` |
-| Morning heat threshold | 10:00 | 24°C | 25°C | `CLOSE_WINDOWS` |
-| Useful morning cooling | 10:00 | 23°C | 25°C | `NO_ACTION` |
+| Scenario | Time | Daily maximum | Outside | Inside | Humidity | Action |
+|---|---:|---:|---:|---:|---:|---|
+| Summer cooling | 20:00 | 27°C | 18°C | 25°C | 50% | `OPEN_WINDOWS` |
+| Already at summer comfort | 20:00 | 27°C | 18°C | 24°C | 50% | `NO_ACTION` |
+| Outside warmer in morning | 08:00 | 27°C | 23°C | 22°C | 50% | `CLOSE_WINDOWS` |
+| Cool day, high humidity | 08:00 | 18°C | 10°C | 21°C | 65% | `OPEN_WINDOWS` |
+| Cool day, normal humidity | 20:00 | 18°C | 10°C | 21°C | 59.9% | `NO_ACTION` |
+| Exact warm-day boundary | 08:00 | 24°C | 10°C | 21°C | 70% | `NO_ACTION` |
+
+Cool-day recommendations are intended for short, manually supervised Stoßlüften, not leaving windows open all night. The MVP does not measure window state, schedule a closing reminder, or control radiator thermostats. Room-specific winter comfort temperatures (for example 20°C) are future configuration, not a currently enforced rule. Indoor humidity alone does not prove that outdoor air will reduce moisture; outdoor moisture/dew-point comparison is a planned refinement.
 
 ## Reliability behavior
 
@@ -70,14 +83,17 @@ The MVP creates one notification key per date and action period:
 2026-08-30:evening
 ```
 
-A successful webhook stores the key; a failed webhook does not. Repeated executions in the same period suppress additional Alexa and phone notifications.
+The period is derived from the execution time, not from the action: opening windows can now be recommended in either period. Repeated executions suppress additional notifications, allowing at most one reserved attempt per period (up to two per day, not two mandatory notifications).
 
-The current store is an injected in-memory `set`. This demonstrates and tests the policy but does not survive a serverless cold start. A persistent implementation such as DynamoDB is planned for deployment.
+The injected `FileNotificationStore` writes keys to `.state/notifications.json` using a temporary file followed by replacement. Docker mounts that directory from the host, so state survives container removal and restarts.
+
+The reservation is persisted **before** the webhook. This favors avoiding duplicate notifications: if sending fails or the process crashes after reserving, another execution in the same period is suppressed. It does not guarantee delivery or exactly-once behavior. The JSON adapter is intended for one local executor, not concurrent distributed writers; systemd does not start a second instance of the same active service.
 
 ## Quality gates
 
 - Python 3.12
 - pytest unit tests
+- offline component-integration tests using the real parser, decision engine, orchestrator, notifier, and file store
 - all external HTTP calls mocked with `responses` or `unittest.mock`
 - branch coverage enabled
 - minimum total coverage: 90%
@@ -89,8 +105,9 @@ The current store is an injected in-memory `set`. This demonstrates and tests th
 Current local result:
 
 ```text
-119 passed
-99.69% total coverage
+155 passed
+98.99% total line/branch coverage
+100% orchestrator coverage
 ```
 
 ## Local setup
@@ -109,6 +126,63 @@ API: AABBCCDDEEFF
 ```
 
 Never commit `.env`. It is ignored by Git; `.env.example` contains names and safe examples only.
+
+Protect the secrets file with `chmod 600 .env`. `.dockerignore` excludes secrets, notification state, Git metadata, and generated artifacts from the Docker build context.
+
+## Local production execution
+
+`Dockerfile.runtime` installs the application at build time and runs `scripts/run_scheduled_control.py`. The container never forces a decision. Build a candidate without overwriting the operational `runtime` tag:
+
+```bash
+docker build -f Dockerfile.runtime -t smart-home-qa-harness:candidate .
+```
+
+A candidate execution uses real APIs and can send a real Alexa notification when a rule matches:
+
+```bash
+mkdir -p .state
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  --env-file .env \
+  -v "$PWD/.state:/app/.state" \
+  smart-home-qa-harness:candidate
+```
+
+Keep `.state` owned by the host user. Do not share production state with tests; integration tests use pytest's temporary directories.
+
+### systemd scheduling
+
+Versioned unit examples are in `deploy/systemd/`. Adjust the repository path, Docker path, and UID:GID before copying them into `~/.config/systemd/user/`. The timer uses the host's local timezone; this deployment expects Europe/Berlin.
+
+- Morning: 06:00, 06:30, …, 10:30.
+- Evening: 18:00, 18:30, …, 22:30.
+- Exact 11:00/23:00 runs are omitted because startup delay would put execution past the inclusive boundary.
+- `Persistent=true` can catch up a missed run; outside permitted periods the decision engine returns `NO_ACTION`.
+
+After installing the units and a tested `runtime` image:
+
+```bash
+systemd-analyze --user verify ~/.config/systemd/user/smart-home-qa.{service,timer}
+systemctl --user daemon-reload
+systemctl --user enable --now smart-home-qa.timer
+sudo loginctl enable-linger "$USER"
+systemctl --user list-timers smart-home-qa.timer
+journalctl --user -u smart-home-qa.service -n 30 --no-pager
+```
+
+Linger keeps the user manager available after logout and at boot; it does not prevent PC suspension. A successful oneshot service returns to `inactive (dead)`, while the timer stays `active (waiting)`. Ensure Docker starts at boot. To stop scheduling: `systemctl --user disable --now smart-home-qa.timer`.
+
+### Controlled release and rollback
+
+Develop on a feature branch, run the full quality gate, and merge the reviewed change into `main`. Build releases from the clean, tested main commit using a commit-specific image tag. Validate the candidate before changing `runtime`.
+
+```bash
+# Run only as an intentional deployment after candidate validation.
+docker tag smart-home-qa-harness:runtime smart-home-qa-harness:rollback
+docker tag smart-home-qa-harness:candidate smart-home-qa-harness:runtime
+```
+
+The next timer execution uses the promoted image. Switching branches or editing source files does not change an already built image. To roll back, retag `smart-home-qa-harness:rollback` as `smart-home-qa-harness:runtime`. Local tests never overwrite `runtime`.
 
 ## Run the quality gate locally
 
@@ -188,10 +262,15 @@ src/smart_home_qa_harness/
 ├── decision_engine.py             # Pure window decision rules
 ├── inside_environment_client.py   # Static and SwitchBot providers
 ├── orchestrator.py                # Safe workflow and deduplication
+├── notification_store.py          # Persistent JSON reservation adapter
 ├── weather_client.py              # Open-Meteo client
 └── webhook_notifier.py            # Voice Monkey integration
 
 tests/unit/                         # Deterministic unit tests and HTTP mocks
+tests/integration/                  # Real component wiring with mocked HTTP
+deploy/systemd/                     # Local service and timer examples
+Dockerfile.runtime                  # Production image, dependencies installed once
+scripts/run_scheduled_control.py    # One non-interactive control cycle
 scripts/smoke_test_switchbot.py     # Manual read-only hardware verification
 scripts/smoke_test_end_to_end.py    # Opt-in Alexa end-to-end verification
 .github/workflows/qa_pipeline.yml   # CI quality gate
@@ -199,12 +278,12 @@ scripts/smoke_test_end_to_end.py    # Opt-in Alexa end-to-end verification
 
 ## Current scope and roadmap
 
-The repository is a tested MVP. GitHub Actions currently runs the environment control on a schedule, while the application remains designed for a future serverless deployment.
+The repository is a self-hosted MVP with persistent notification state and forecast-selected cooling/humidity rules. The previous temperature-only Docker deployment has been manually verified through Alexa and mobile notifications. The seasonal revision is validated offline; real-device verification and image promotion remain separate release steps.
 
 Planned improvements:
 
-- persistent notification state for cold-start-safe deduplication;
-- migration of the scheduled control from GitHub Actions to a serverless deployment;
-- humidity-based winter ventilation rules;
+- outdoor humidity/dew-point comparison for more informed winter ventilation;
+- room-specific winter comfort temperatures and closing reminders;
+- notification delivery recovery and state retention/concurrency improvements;
 - structured logging and operational monitoring;
 - integration with the installed SwitchBot radiator thermostats.

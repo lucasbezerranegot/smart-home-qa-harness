@@ -1,0 +1,14 @@
+[Unit]
+Description=Run Smart Home environmental control
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/smart-home-qa-harness
+
+# Adjust the repository path and UID:GID to match your host before installing.
+ExecStart=/usr/bin/docker run --rm \
+    --user 1000:1000 \
+    --env-file %h/Projects/smart-home-qa-harness/.env \
+    --volume %h/Projects/smart-home-qa-harness/.state:/app/.state \
+    smart-home-qa-harness:runtime
