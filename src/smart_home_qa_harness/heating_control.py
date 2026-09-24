@@ -21,6 +21,7 @@ class HeatingConfigurationError(ValueError):
 @dataclass(frozen=True)
 class HeatingConfiguration:
     relay_id: str
+    channel: int
     meter_id: str
     target_temperature: float
     hysteresis: float
@@ -30,6 +31,12 @@ class HeatingConfiguration:
             raise HeatingConfigurationError(
                 code="INVALID_RELAY_ID",
                 message="Relay ID must be a non-empty string.",
+            )
+
+        if isinstance(self.channel, bool) or self.channel not in {1, 2}:
+            raise HeatingConfigurationError(
+                code="INVALID_RELAY_CHANNEL",
+                message="Relay channel must be 1 or 2.",
             )
 
         if not isinstance(self.meter_id, str) or not self.meter_id.strip():

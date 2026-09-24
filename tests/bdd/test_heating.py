@@ -88,6 +88,7 @@ def evaluate_heating(relay_meter_pair, meter_reading, previous_state):
 def children_room_configuration():
     return HeatingConfiguration(
         relay_id="children-room-relay",
+        channel=2,
         meter_id="children-room-meter",
         target_temperature=20.0,
         hysteresis=0.5,

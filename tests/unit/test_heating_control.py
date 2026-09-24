@@ -17,6 +17,7 @@ def configuration(
 ):
     return HeatingConfiguration(
         relay_id="children-room-relay",
+        channel=2,
         meter_id="children-room-meter",
         target_temperature=target_temperature,
         hysteresis=hysteresis,
@@ -114,6 +115,7 @@ def test_rejects_invalid_relay_id(relay_id):
     with pytest.raises(HeatingConfigurationError) as captured:
         HeatingConfiguration(
             relay_id=relay_id,
+            channel=2,
             meter_id="children-room-meter",
             target_temperature=20.0,
             hysteresis=0.5,
@@ -128,6 +130,7 @@ def test_rejects_invalid_configured_meter_id(meter_id):
     with pytest.raises(HeatingConfigurationError) as captured:
         HeatingConfiguration(
             relay_id="children-room-relay",
+            channel=2,
             meter_id=meter_id,
             target_temperature=20.0,
             hysteresis=0.5,
@@ -141,6 +144,7 @@ def test_rejects_invalid_configured_target_temperature(target_temperature):
     with pytest.raises(HeatingConfigurationError) as captured:
         HeatingConfiguration(
             relay_id="children-room-relay",
+            channel=2,
             meter_id="children-room-meter",
             target_temperature=target_temperature,
             hysteresis=0.5,
@@ -154,9 +158,24 @@ def test_rejects_invalid_configured_hysteresis(hysteresis):
     with pytest.raises(HeatingConfigurationError) as captured:
         HeatingConfiguration(
             relay_id="children-room-relay",
+            channel=2,
             meter_id="children-room-meter",
             target_temperature=20.0,
             hysteresis=hysteresis,
         )
 
     assert captured.value.code == "INVALID_HYSTERESIS"
+
+
+@pytest.mark.parametrize("channel", [0, 3, -1, True, None, "2"])
+def test_rejects_invalid_relay_channel(channel):
+    with pytest.raises(HeatingConfigurationError) as captured:
+        HeatingConfiguration(
+            relay_id="children-room-relay",
+            channel=channel,
+            meter_id="children-room-meter",
+            target_temperature=20.0,
+            hysteresis=0.5,
+        )
+
+    assert captured.value.code == "INVALID_RELAY_CHANNEL"
