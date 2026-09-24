@@ -75,6 +75,7 @@ def test_sends_off_command_and_confirms_new_state():
         status_provider=status_provider,
         state_setter=state_setter,
         dry_run=False,
+        sleep=lambda _: None,
     )
 
     state_setter.assert_called_once_with("relay-3", 2, RelayState.OFF)
@@ -109,11 +110,40 @@ def test_reports_error_when_command_success_is_not_confirmed():
         status_provider=status_provider,
         state_setter=Mock(),
         dry_run=False,
+        sleep=lambda _: None,
     )
 
     assert result.command_sent is True
     assert result.state_confirmed is False
     assert result.error_code == "RELAY_STATE_NOT_CONFIRMED"
+
+
+def test_retries_confirmation_without_resending_command():
+    status_provider = Mock(
+        side_effect=[
+            relay_status(RelayState.ON),
+            relay_status(RelayState.ON),
+            relay_status(RelayState.OFF),
+        ]
+    )
+    state_setter = Mock()
+    sleep = Mock()
+
+    result = run_heating_control(
+        configuration=configuration(),
+        readings=[reading(22.0)],
+        status_provider=status_provider,
+        state_setter=state_setter,
+        dry_run=False,
+        sleep=sleep,
+    )
+
+    state_setter.assert_called_once_with("relay-3", 2, RelayState.OFF)
+    assert status_provider.call_count == 3
+    sleep.assert_called_once_with(1.0)
+    assert result.command_sent is True
+    assert result.state_confirmed is True
+    assert result.error_code is None
 
 
 def test_does_not_command_when_current_relay_state_cannot_be_read():

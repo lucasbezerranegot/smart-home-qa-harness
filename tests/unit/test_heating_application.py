@@ -19,12 +19,12 @@ def heating_environment():
         "HEATING_MAXIMUM_READING_AGE_SECONDS": "600",
     }
     names = [
-        "banheiro-box",
-        "cozinha",
-        "sala-de-estar",
-        "banheiro-banheira",
-        "quarto",
-        "criancas",
+        "shower-bathroom",
+        "kitchen",
+        "living-room",
+        "bathtub-bathroom",
+        "bedroom",
+        "children-room",
     ]
     for index, name in enumerate(names, start=1):
         relay_number = ((index - 1) // 2) + 1
@@ -33,6 +33,7 @@ def heating_environment():
         environ.update(
             {
                 f"{prefix}_NAME": name,
+                f"{prefix}_ENABLED": "true",
                 f"{prefix}_RELAY_ID": f"relay-{relay_number}",
                 f"{prefix}_CHANNEL": str(channel),
                 f"{prefix}_METER_ID": f"meter-{index}",
@@ -63,7 +64,7 @@ def test_loads_six_zones_across_three_dual_channel_relays():
         1,
         2,
     ]
-    assert result.zones[-1].name == "criancas"
+    assert result.zones[-1].name == "children-room"
     assert result.zones[-1].configuration.meter_id == "meter-6"
 
 
@@ -102,3 +103,16 @@ def test_children_zone_dry_run_decides_off_without_sending_command(
     assert result.desired_state is RelayState.OFF
     assert result.command_sent is False
     set_relay_state.assert_not_called()
+
+
+def test_ignores_incomplete_disabled_zones():
+    environ = heating_environment()
+    for index in range(1, 6):
+        prefix = f"HEATING_ZONE_{index}"
+        environ[f"{prefix}_ENABLED"] = "false"
+        environ[f"{prefix}_RELAY_ID"] = ""
+        environ[f"{prefix}_METER_ID"] = ""
+
+    result = load_heating_application_config(environ)
+
+    assert [zone.name for zone in result.zones] == ["children-room"]

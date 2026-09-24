@@ -224,10 +224,11 @@ The smoke test is intentionally excluded from CI because it requires secrets, in
 
 ## Heating relay dry-run and controlled command
 
-Configure all six `HEATING_ZONE_*` entries in `.env`. Each zone maps one
-SwitchBot Meter to one channel of a Relay Switch 2PM. The heating command is
-safe by default: it reads the real Meter and relay status, prints the decision,
-and does not change the relay.
+Enable and configure the required `HEATING_ZONE_*` entries in `.env`. Disabled
+zones may remain incomplete. Each enabled zone maps one SwitchBot Meter to one
+channel of a Relay Switch 2PM. The heating command is safe by default: it reads
+the real Meter and relay status, prints the decision, and does not change the
+relay.
 
 ```bash
 docker run --rm \
@@ -236,7 +237,7 @@ docker run --rm \
   -w /app \
   python:3.12-slim \
   sh -c "pip install -q -e . && python scripts/run_heating_control.py \
-    --zone criancas"
+    --zone children-room"
 ```
 
 A real command requires all three controls: `--apply`,
@@ -252,7 +253,7 @@ docker run --rm -it \
   -w /app \
   python:3.12-slim \
   sh -c "pip install -q -e . && python scripts/run_heating_control.py \
-    --zone criancas --apply"
+    --zone children-room --apply"
 ```
 
 Do not schedule the `--apply` command until every zone has been verified in

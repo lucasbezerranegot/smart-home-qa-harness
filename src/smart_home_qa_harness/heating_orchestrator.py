@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+import time
 
 from smart_home_qa_harness.heating_control import (
     HeatingConfiguration,
@@ -34,6 +35,9 @@ def run_heating_control(
     status_provider: Callable[[str, int], RelayChannelStatus],
     state_setter: Callable[[str, int, RelayState], None],
     dry_run: bool = True,
+    confirmation_attempts: int = 3,
+    confirmation_delay_seconds: float = 1.0,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> HeatingOrchestrationResult:
     """Evaluate and optionally apply one heating relay-channel decision."""
 
@@ -87,10 +91,6 @@ def run_heating_control(
             configuration.channel,
             desired_state,
         )
-        confirmed_status = status_provider(
-            configuration.relay_id,
-            configuration.channel,
-        )
     except SwitchBotRelayError as error:
         return _result(
             configuration=configuration,
@@ -102,7 +102,29 @@ def run_heating_control(
             error_code=error.code,
         )
 
-    state_confirmed = confirmed_status.state is desired_state
+    state_confirmed = False
+    try:
+        for attempt in range(confirmation_attempts):
+            confirmed_status = status_provider(
+                configuration.relay_id,
+                configuration.channel,
+            )
+            if confirmed_status.state is desired_state:
+                state_confirmed = True
+                break
+            if attempt < confirmation_attempts - 1:
+                sleep(confirmation_delay_seconds)
+    except SwitchBotRelayError as error:
+        return _result(
+            configuration=configuration,
+            previous_state=current_status.state,
+            desired_state=desired_state,
+            command_sent=True,
+            dry_run=False,
+            state_confirmed=False,
+            error_code=error.code,
+        )
+
     return _result(
         configuration=configuration,
         previous_state=current_status.state,

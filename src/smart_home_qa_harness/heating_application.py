@@ -55,7 +55,11 @@ def load_heating_application_config(
         maximum_age_seconds = int(
             environ.get("HEATING_MAXIMUM_READING_AGE_SECONDS", "600")
         )
-        zones = tuple(_load_zone(environ, index) for index in range(1, 7))
+        zones = tuple(
+            _load_zone(environ, index)
+            for index in range(1, 7)
+            if _zone_is_enabled(environ, index)
+        )
     except KeyError as error:
         raise HeatingApplicationConfigurationError(
             "MISSING_HEATING_CONFIGURATION",
@@ -67,7 +71,12 @@ def load_heating_application_config(
             "Heating configuration contains an invalid value.",
         ) from error
 
-    if not token.strip() or not secret.strip() or maximum_age_seconds < 0:
+    if (
+        not token.strip()
+        or not secret.strip()
+        or maximum_age_seconds < 0
+        or not zones
+    ):
         raise HeatingApplicationConfigurationError(
             "INVALID_HEATING_CONFIGURATION",
             "Heating credentials and maximum reading age must be valid.",
@@ -161,3 +170,14 @@ def _load_zone(environ: Mapping[str, str], index: int) -> HeatingZone:
             hysteresis=float(environ[f"{prefix}_HYSTERESIS"]),
         ),
     )
+
+
+def _zone_is_enabled(environ: Mapping[str, str], index: int) -> bool:
+    key = f"HEATING_ZONE_{index}_ENABLED"
+    value = environ.get(key, "false").strip().lower()
+    if value not in {"true", "false"}:
+        raise HeatingApplicationConfigurationError(
+            "INVALID_HEATING_CONFIGURATION",
+            f"{key} must be true or false.",
+        )
+    return value == "true"
