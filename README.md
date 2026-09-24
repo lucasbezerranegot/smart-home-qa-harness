@@ -222,6 +222,42 @@ docker run --rm \
 
 The smoke test is intentionally excluded from CI because it requires secrets, internet access, and online hardware.
 
+## Heating relay dry-run and controlled command
+
+Configure all six `HEATING_ZONE_*` entries in `.env`. Each zone maps one
+SwitchBot Meter to one channel of a Relay Switch 2PM. The heating command is
+safe by default: it reads the real Meter and relay status, prints the decision,
+and does not change the relay.
+
+```bash
+docker run --rm \
+  --env-file .env \
+  -v "$PWD:/app" \
+  -w /app \
+  python:3.12-slim \
+  sh -c "pip install -q -e . && python scripts/run_heating_control.py \
+    --zone criancas"
+```
+
+A real command requires all three controls: `--apply`,
+`ALLOW_REAL_HEATING_COMMANDS=true`, and the exact interactive confirmation.
+The application reads the selected channel again after the command and fails
+if the requested state is not confirmed.
+
+```bash
+docker run --rm -it \
+  --env-file .env \
+  --env ALLOW_REAL_HEATING_COMMANDS=true \
+  -v "$PWD:/app" \
+  -w /app \
+  python:3.12-slim \
+  sh -c "pip install -q -e . && python scripts/run_heating_control.py \
+    --zone criancas --apply"
+```
+
+Do not schedule the `--apply` command until every zone has been verified in
+dry-run mode against its physical relay device, channel, and Meter.
+
 ## End-to-end Alexa smoke test
 
 The end-to-end script reads current Open-Meteo data and the real SwitchBot Meter, runs the decision engine, and can continue through Voice Monkey to an Alexa routine and phone notification.
