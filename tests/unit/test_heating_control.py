@@ -2,6 +2,7 @@ import pytest
 
 from smart_home_qa_harness.heating_control import (
     HeatingConfiguration,
+    HeatingConfigurationError,
     decide_relay_state,
 )
 from smart_home_qa_harness.heating_engine import (
@@ -106,3 +107,56 @@ def test_turns_children_room_relay_off_at_current_temperature():
     )
 
     assert result == "OFF"
+
+
+@pytest.mark.parametrize("relay_id", ["", "   ", None, 123])
+def test_rejects_invalid_relay_id(relay_id):
+    with pytest.raises(HeatingConfigurationError) as captured:
+        HeatingConfiguration(
+            relay_id=relay_id,
+            meter_id="children-room-meter",
+            target_temperature=20.0,
+            hysteresis=0.5,
+        )
+
+    assert captured.value.code == "INVALID_RELAY_ID"
+    assert captured.value.retryable is False
+
+
+@pytest.mark.parametrize("meter_id", ["", "   ", None, 123])
+def test_rejects_invalid_configured_meter_id(meter_id):
+    with pytest.raises(HeatingConfigurationError) as captured:
+        HeatingConfiguration(
+            relay_id="children-room-relay",
+            meter_id=meter_id,
+            target_temperature=20.0,
+            hysteresis=0.5,
+        )
+
+    assert captured.value.code == "INVALID_METER_ID"
+
+
+@pytest.mark.parametrize("target_temperature", [None, True, "20", float("nan"), float("inf")])
+def test_rejects_invalid_configured_target_temperature(target_temperature):
+    with pytest.raises(HeatingConfigurationError) as captured:
+        HeatingConfiguration(
+            relay_id="children-room-relay",
+            meter_id="children-room-meter",
+            target_temperature=target_temperature,
+            hysteresis=0.5,
+        )
+
+    assert captured.value.code == "INVALID_TARGET_TEMPERATURE"
+
+
+@pytest.mark.parametrize("hysteresis", [-0.1, None, True, "0.5", float("nan"), float("inf")])
+def test_rejects_invalid_configured_hysteresis(hysteresis):
+    with pytest.raises(HeatingConfigurationError) as captured:
+        HeatingConfiguration(
+            relay_id="children-room-relay",
+            meter_id="children-room-meter",
+            target_temperature=20.0,
+            hysteresis=hysteresis,
+        )
+
+    assert captured.value.code == "INVALID_HYSTERESIS"
