@@ -259,6 +259,35 @@ docker run --rm -it \
 Do not schedule the `--apply` command until every zone has been verified in
 dry-run mode against its physical relay device, channel, and Meter.
 
+### Scheduled children-room pilot
+
+The scheduled runner is intentionally restricted to a single enabled zone
+named `children-room`. It also requires both
+`HEATING_SCHEDULED_ZONE=children-room` and
+`ALLOW_REAL_HEATING_COMMANDS=true`. Each execution writes one JSON result to
+the systemd journal. The timer runs every five minutes and systemd does not
+start another instance while the oneshot service is still active.
+
+Review and install the versioned units only after validating the candidate
+image and one manual real command:
+
+```bash
+cp deploy/systemd/smart-home-heating.{service,timer} \
+  ~/.config/systemd/user/
+systemd-analyze --user verify \
+  ~/.config/systemd/user/smart-home-heating.{service,timer}
+systemctl --user daemon-reload
+systemctl --user enable --now smart-home-heating.timer
+systemctl --user list-timers smart-home-heating.timer
+journalctl --user -u smart-home-heating.service -n 30 --no-pager
+```
+
+Emergency stop:
+
+```bash
+systemctl --user disable --now smart-home-heating.timer
+```
+
 ## End-to-end Alexa smoke test
 
 The end-to-end script reads current Open-Meteo data and the real SwitchBot Meter, runs the decision engine, and can continue through Voice Monkey to an Alexa routine and phone notification.
