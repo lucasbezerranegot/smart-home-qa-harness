@@ -35,3 +35,11 @@ Feature: Control heating using the associated Meter
       | MISSING        |
       | INVALID        |
       | STALE          |
+
+  Scenario: Use only the Meter associated with the heating relay
+    Given the children room relay is associated with the children room Meter
+    And the children room Meter reads 19 degrees Celsius
+    And another Meter reads 25 degrees Celsius
+    And the relay is "OFF"
+    When the heating control evaluates the available Meter readings
+    Then the relay should be "ON"
