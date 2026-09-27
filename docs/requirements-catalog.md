@@ -19,9 +19,9 @@ This catalog is the versioned index of product and quality requirements. The lin
 | `REQ-QA-001` | Provide guarded hardware and end-to-end smoke tests | QA | Read-only and explicit opt-in scripts | [#13](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/13) |
 | `NFR-QA-001` | Enforce the automated quality gate | QA | GitHub Actions, branch coverage threshold | [#14](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/14) |
 
-## Implemented locally and awaiting delivery
+## Delivered through pull request #37
 
-These requirements are represented by commits after `origin/main` and remain `In progress` until merged into the default branch.
+These requirements are implemented and delivered to the default branch by [pull request #37](https://github.com/lucasbezerranegot/smart-home-qa-harness/pull/37).
 
 | ID | Requirement | Evidence summary | Existing commits | GitHub Issue |
 |---|---|---|---|---|
