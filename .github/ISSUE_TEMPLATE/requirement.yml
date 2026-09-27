@@ -1,0 +1,120 @@
+name: Requirement
+description: Define a functional or non-functional requirement with acceptance criteria and traceability.
+title: "REQ-AREA-000 — "
+labels:
+  - requirement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write the requirement in English. Follow `docs/requirements-management.md` and use the next unused ID from `docs/requirements-catalog.md`.
+
+  - type: dropdown
+    id: lifecycle
+    attributes:
+      label: Lifecycle status
+      options:
+        - Planned
+        - In progress
+        - Implemented
+        - Blocked
+        - Superseded
+    validations:
+      required: true
+
+  - type: dropdown
+    id: origin
+    attributes:
+      label: Origin
+      options:
+        - New product requirement
+        - Retrospectively documented implementation
+        - Requirement discovered during implementation
+        - Reliability or safety requirement
+        - Technical or operational constraint
+    validations:
+      required: true
+
+  - type: textarea
+    id: rationale
+    attributes:
+      label: Rationale
+      description: Explain the problem, value, and reason this behavior belongs in the product.
+      placeholder: Residents need...
+    validations:
+      required: true
+
+  - type: textarea
+    id: story
+    attributes:
+      label: User story or system objective
+      description: Use a user story or a concise system objective for non-user-facing behavior.
+      placeholder: |
+        As a resident,
+        I want...
+        so that...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Use Given/When/Then for boundaries, state transitions, and failures.
+      placeholder: |
+        - [ ] Given ... when ... then ...
+        - [ ] Given ... when ... then ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety and failure behavior
+      description: State fail-safe behavior, retries, manual controls, and forbidden actions. Write "Not applicable" when justified.
+    validations:
+      required: true
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: Record intentionally excluded behavior to prevent accidental scope growth.
+    validations:
+      required: true
+
+  - type: textarea
+    id: traceability
+    attributes:
+      label: Traceability
+      description: Link branches, commits, pull requests, code, feature files, and tests. Use TBD for planned work.
+      placeholder: |
+        Branch: TBD
+        Commits: TBD
+        Code: TBD
+        Tests: TBD
+        Pull request: TBD
+    validations:
+      required: true
+
+  - type: textarea
+    id: relationships
+    attributes:
+      label: Dependencies and related requirements
+      description: Reference requirement IDs or GitHub Issues, or write "None".
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: quality
+    attributes:
+      label: Quality checklist
+      options:
+        - label: The title contains a stable requirement ID.
+          required: true
+        - label: The acceptance criteria describe observable and testable behavior.
+          required: true
+        - label: Safety behavior and scope exclusions are explicit.
+          required: true
+        - label: The requirement does not duplicate an existing catalog entry.
+          required: true
