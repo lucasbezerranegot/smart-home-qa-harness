@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import Enum
 
 
 class RoomConfigurationError(ValueError):
@@ -14,6 +15,12 @@ class RoomConfigurationError(ValueError):
         self.retryable = False
 
 
+class HumidifierProviderKind(Enum):
+    SWITCHBOT_PLUG = "switchbot-plug"
+    VESYNC = "vesync"
+    TINYTUYA_IR = "tinytuya-ir"
+
+
 @dataclass(frozen=True)
 class RoomConfig:
     """Devices and capabilities that belong to one physical room."""
@@ -22,7 +29,8 @@ class RoomConfig:
     display_name: str
     meter_id: str
     has_window: bool
-    humidifier_plug_id: str | None = None
+    humidifier_provider: HumidifierProviderKind | None = None
+    humidifier_device_id: str | None = None
 
     def __post_init__(self) -> None:
         for field_name, value in (
@@ -42,13 +50,28 @@ class RoomConfig:
                 "has_window must be a boolean.",
             )
 
-        if self.humidifier_plug_id is not None and (
-            not isinstance(self.humidifier_plug_id, str)
-            or not self.humidifier_plug_id.strip()
+        if (self.humidifier_provider is None) != (
+            self.humidifier_device_id is None
         ):
             raise RoomConfigurationError(
                 "INVALID_ROOM_CONFIGURATION",
-                "humidifier_plug_id must be null or a non-empty string.",
+                "Humidifier provider and device ID must be configured together.",
+            )
+        if self.humidifier_provider is not None and not isinstance(
+            self.humidifier_provider,
+            HumidifierProviderKind,
+        ):
+            raise RoomConfigurationError(
+                "INVALID_ROOM_CONFIGURATION",
+                "humidifier_provider is invalid.",
+            )
+        if self.humidifier_device_id is not None and (
+            not isinstance(self.humidifier_device_id, str)
+            or not self.humidifier_device_id.strip()
+        ):
+            raise RoomConfigurationError(
+                "INVALID_ROOM_CONFIGURATION",
+                "humidifier_device_id must be null or a non-empty string.",
             )
 
 
@@ -74,11 +97,11 @@ class HomeRoomConfig:
             [room.meter_id for room in self.rooms],
         )
         _reject_duplicates(
-            "humidifier plug ID",
+            "humidifier device ID",
             [
-                room.humidifier_plug_id
+                room.humidifier_device_id
                 for room in self.rooms
-                if room.humidifier_plug_id is not None
+                if room.humidifier_device_id is not None
             ],
         )
 
@@ -91,7 +114,7 @@ class HomeRoomConfig:
         return tuple(
             room
             for room in self.rooms
-            if room.humidifier_plug_id is not None
+            if room.humidifier_provider is not None
         )
 
 
@@ -141,10 +164,7 @@ def _load_room(environ: Mapping[str, str], index: int) -> RoomConfig:
             environ[f"{prefix}_HAS_WINDOW"],
             f"{prefix}_HAS_WINDOW",
         ),
-        humidifier_plug_id=(
-            environ.get(f"{prefix}_HUMIDIFIER_PLUG_ID", "").strip()
-            or None
-        ),
+        **_load_humidifier_binding(environ, prefix),
     )
 
 
@@ -158,6 +178,45 @@ def _parse_boolean(value: str, key: str) -> bool:
             f"{key} must be true or false.",
         )
     return value.strip().lower() == "true"
+
+
+def _load_humidifier_binding(
+    environ: Mapping[str, str],
+    prefix: str,
+) -> dict:
+    raw_provider = environ.get(f"{prefix}_HUMIDIFIER_PROVIDER", "").strip()
+    raw_device_id = environ.get(f"{prefix}_HUMIDIFIER_DEVICE_ID", "").strip()
+
+    # Compatibility with the first SwitchBot-only room registry revision.
+    legacy_plug_id = environ.get(
+        f"{prefix}_HUMIDIFIER_PLUG_ID",
+        "",
+    ).strip()
+    if legacy_plug_id:
+        if raw_provider or raw_device_id:
+            raise RoomConfigurationError(
+                "INVALID_ROOM_CONFIGURATION",
+                "Legacy and generic humidifier configuration cannot be mixed.",
+            )
+        raw_provider = HumidifierProviderKind.SWITCHBOT_PLUG.value
+        raw_device_id = legacy_plug_id
+
+    if not raw_provider and not raw_device_id:
+        return {
+            "humidifier_provider": None,
+            "humidifier_device_id": None,
+        }
+    try:
+        provider = HumidifierProviderKind(raw_provider)
+    except ValueError as error:
+        raise RoomConfigurationError(
+            "UNKNOWN_HUMIDIFIER_PROVIDER",
+            f"Unknown humidifier provider: {raw_provider}",
+        ) from error
+    return {
+        "humidifier_provider": provider,
+        "humidifier_device_id": raw_device_id or None,
+    }
 
 
 def _reject_duplicates(label: str, values: list[str]) -> None:

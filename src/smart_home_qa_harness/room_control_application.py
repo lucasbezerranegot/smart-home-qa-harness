@@ -9,6 +9,12 @@ from smart_home_qa_harness.humidifier_control import (
     HumidifierControlResult,
     run_humidifier_control,
 )
+from smart_home_qa_harness.humidifier_provider import (
+    HumidifierProvider,
+    HumidifierProviderError,
+    HumidifierProviderStatus,
+    HumidifierState,
+)
 from smart_home_qa_harness.inside_environment_client import (
     IndoorEnvironmentData,
     IndoorEnvironmentError,
@@ -16,15 +22,16 @@ from smart_home_qa_harness.inside_environment_client import (
 )
 from smart_home_qa_harness.room_config import (
     HomeRoomConfig,
+    HumidifierProviderKind,
+    RoomConfig,
     load_room_config,
 )
 from smart_home_qa_harness.room_ventilation_control import (
     HomeVentilationResult,
     evaluate_home_ventilation,
 )
-from smart_home_qa_harness.switchbot_plug_client import (
-    get_plug_status,
-    set_plug_state,
+from smart_home_qa_harness.switchbot_humidifier_provider import (
+    SwitchBotPlugHumidifierProvider,
 )
 from smart_home_qa_harness.weather_client import (
     WeatherClientError,
@@ -122,8 +129,7 @@ def run_room_control_cycle(
         get_switchbot_indoor_environment
     ),
     weather_provider: Callable[..., WeatherData] = get_current_weather,
-    plug_status_provider: Callable = get_plug_status,
-    plug_state_setter: Callable = set_plug_state,
+    humidifier_provider_factory: Callable | None = None,
 ) -> RoomControlCycleResult:
     """Read each Meter once and run all room-aware controllers."""
 
@@ -170,20 +176,15 @@ def run_room_control_cycle(
                 else None
             ),
             current_time=local_time,
-            status_provider=lambda device_id: plug_status_provider(
-                token=config.switchbot_token,
-                secret=config.switchbot_secret,
-                device_id=device_id,
-                timestamp_ms=timestamp_ms,
-                nonce=nonce_factory(),
-            ),
-            state_setter=lambda device_id, state: plug_state_setter(
-                token=config.switchbot_token,
-                secret=config.switchbot_secret,
-                device_id=device_id,
-                state=state,
-                timestamp_ms=timestamp_ms,
-                nonce=nonce_factory(),
+            provider=(
+                humidifier_provider_factory(room)
+                if humidifier_provider_factory is not None
+                else _build_humidifier_provider(
+                    config=config,
+                    room=room,
+                    timestamp_ms=timestamp_ms,
+                    nonce_factory=nonce_factory,
+                )
             ),
             dry_run=not apply_humidifier_commands,
             on_below=config.humidifier_on_below,
@@ -235,3 +236,55 @@ def _is_ventilation_period(current_time: time) -> bool:
         time(6, 0) <= current_time <= time(11, 0)
         or time(18, 0) <= current_time <= time(23, 0)
     )
+
+
+def _build_humidifier_provider(
+    config: RoomControlApplicationConfig,
+    room: RoomConfig,
+    timestamp_ms: int,
+    nonce_factory: Callable[[], str],
+) -> HumidifierProvider:
+    if room.humidifier_provider is HumidifierProviderKind.SWITCHBOT_PLUG:
+        return SwitchBotPlugHumidifierProvider(
+            token=config.switchbot_token,
+            secret=config.switchbot_secret,
+            plug_device_id=room.humidifier_device_id,
+            timestamp_ms=timestamp_ms,
+            nonce_factory=nonce_factory,
+        )
+    assert room.humidifier_provider is not None
+    assert room.humidifier_device_id is not None
+    return _UnavailableHumidifierProvider(
+        unavailable_provider_name=room.humidifier_provider.value,
+        unavailable_device_id=room.humidifier_device_id,
+    )
+
+
+@dataclass(frozen=True)
+class _UnavailableHumidifierProvider:
+    """Keep one unavailable adapter from interrupting other rooms."""
+
+    unavailable_provider_name: str
+    unavailable_device_id: str
+
+    @property
+    def provider_name(self) -> str:
+        return self.unavailable_provider_name
+
+    @property
+    def device_id(self) -> str:
+        return self.unavailable_device_id
+
+    def read_status(self) -> HumidifierProviderStatus:
+        raise HumidifierProviderError(
+            "UNSUPPORTED_HUMIDIFIER_PROVIDER",
+            f"Provider is not implemented: {self.provider_name}",
+            False,
+        )
+
+    def set_state(self, state: HumidifierState) -> None:
+        raise HumidifierProviderError(
+            "UNSUPPORTED_HUMIDIFIER_PROVIDER",
+            f"Provider is not implemented: {self.provider_name}",
+            False,
+        )

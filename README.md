@@ -105,8 +105,8 @@ The reservation is persisted **before** the webhook. This favors avoiding duplic
 Current local result:
 
 ```text
-390 passed
-93.70% total line/branch coverage
+417 passed
+93.59% total line/branch coverage
 100% orchestrator coverage
 ```
 
@@ -225,9 +225,11 @@ The smoke test is intentionally excluded from CI because it requires secrets, in
 ## Room-aware ventilation and humidifier control
 
 The room-aware path uses the numbered `ROOM_*` registry in `.env`. Every room
-has exactly one Meter. `HAS_WINDOW=true` opts a room into ventilation, while a
-non-empty `HUMIDIFIER_PLUG_ID` opts it into humidifier control. This keeps the
-physical room/device mapping separate from the rules that consume it.
+has exactly one Meter. `HAS_WINDOW=true` opts a room into ventilation, while
+`HUMIDIFIER_PROVIDER` plus `HUMIDIFIER_DEVICE_ID` opt it into humidifier
+control. This keeps the physical room/device mapping separate from the rules
+that consume it. The room-level controller uses one provider-neutral contract;
+the SwitchBot Plug Mini is its first adapter.
 
 One cycle reads every configured Meter once. During a ventilation period it
 evaluates every room with a window and groups all matching rooms into one
@@ -255,7 +257,8 @@ ALLOW_REAL_HUMIDIFIER_COMMANDS=true \
 ```
 
 After a command, the controller reads the plug status again and reports
-`PLUG_STATE_NOT_CONFIRMED` if SwitchBot does not expose the requested state.
+`HUMIDIFIER_STATE_NOT_CONFIRMED` if the provider does not confirm the requested
+physical state.
 The Plug Mini's instantaneous power is recorded for future calibration only.
 This version intentionally does not interpret low power as an empty water tank
 and does not send a water notification.
@@ -369,7 +372,9 @@ src/smart_home_qa_harness/
 ├── room_ventilation_control.py     # Multi-room aggregation and failures
 ├── humidifier_engine.py            # Schedule and humidity hysteresis
 ├── humidifier_control.py           # Safe plug command orchestration
+├── humidifier_provider.py          # Provider-neutral control contract
 ├── switchbot_plug_client.py        # Plug Mini EU status and commands
+├── switchbot_humidifier_provider.py # SwitchBot implementation of the contract
 ├── room_control_application.py     # Shared Meter reads and controller wiring
 ├── inside_environment_client.py   # Static and SwitchBot providers
 ├── orchestrator.py                # Safe workflow and deduplication

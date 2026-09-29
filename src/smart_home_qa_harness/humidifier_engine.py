@@ -1,9 +1,9 @@
-"""Pure schedule and hysteresis rules for plug-controlled humidifiers."""
+"""Pure schedule and hysteresis rules for room humidifiers."""
 
 from datetime import time
 import math
 
-from smart_home_qa_harness.switchbot_plug_client import PlugState
+from smart_home_qa_harness.humidifier_provider import HumidifierState
 
 
 HUMIDIFIER_ON_BELOW = 45.0
@@ -34,17 +34,17 @@ def is_humidification_period(current_time: time) -> bool:
 
 def decide_humidifier_state(
     relative_humidity: float | None,
-    previous_state: PlugState,
+    previous_state: HumidifierState,
     current_time: time,
     on_below: float = HUMIDIFIER_ON_BELOW,
     off_at: float = HUMIDIFIER_OFF_AT,
-) -> PlugState:
+) -> HumidifierState:
     """Choose a safe desired state using schedule and humidity hysteresis."""
 
-    if not isinstance(previous_state, PlugState):
+    if not isinstance(previous_state, HumidifierState):
         raise HumidifierDecisionError(
             "INVALID_HUMIDIFIER_INPUT",
-            "Previous state must be a PlugState value.",
+            "Previous state must be a HumidifierState value.",
         )
     if not _valid_threshold(on_below) or not _valid_threshold(off_at):
         raise HumidifierDecisionError(
@@ -59,13 +59,13 @@ def decide_humidifier_state(
 
     # A missing or invalid measurement must never leave a humidifier running.
     if not _valid_threshold(relative_humidity):
-        return PlugState.OFF
+        return HumidifierState.OFF
     if not is_humidification_period(current_time):
-        return PlugState.OFF
+        return HumidifierState.OFF
     if relative_humidity < on_below:
-        return PlugState.ON
+        return HumidifierState.ON
     if relative_humidity >= off_at:
-        return PlugState.OFF
+        return HumidifierState.OFF
     return previous_state
 
 
