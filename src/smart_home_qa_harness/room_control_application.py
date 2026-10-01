@@ -3,6 +3,7 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
+import math
 import uuid
 
 from smart_home_qa_harness.humidifier_control import (
@@ -33,6 +34,9 @@ from smart_home_qa_harness.room_ventilation_control import (
 from smart_home_qa_harness.switchbot_humidifier_provider import (
     SwitchBotPlugHumidifierProvider,
 )
+from smart_home_qa_harness.vesync_humidifier_provider import (
+    VeSyncHumidifierProvider,
+)
 from smart_home_qa_harness.weather_client import (
     WeatherClientError,
     WeatherData,
@@ -49,6 +53,11 @@ class RoomControlApplicationConfig:
     home: HomeRoomConfig
     humidifier_on_below: float
     humidifier_off_at: float
+    vesync_username: str | None
+    vesync_password: str | None
+    vesync_country_code: str
+    vesync_time_zone: str
+    vesync_timeout_seconds: float
 
 
 @dataclass(frozen=True)
@@ -87,6 +96,9 @@ def load_room_control_config(
         humidifier_off_at = float(
             environ.get("HUMIDIFIER_OFF_AT", "50")
         )
+        vesync_timeout_seconds = float(
+            environ.get("VESYNC_TIMEOUT_SECONDS", "15")
+        )
         home = load_room_config(environ)
     except KeyError as error:
         raise RoomControlApplicationError(
@@ -103,10 +115,34 @@ def load_room_control_config(
         not token.strip()
         or not secret.strip()
         or not 0 <= humidifier_on_below < humidifier_off_at <= 100
+        or not math.isfinite(vesync_timeout_seconds)
+        or vesync_timeout_seconds <= 0
     ):
         raise RoomControlApplicationError(
             "INVALID_ROOM_CONTROL_CONFIGURATION",
             "Credentials and humidity thresholds must be valid.",
+        )
+
+    vesync_username = environ.get("VESYNC_USERNAME", "").strip() or None
+    vesync_password = environ.get("VESYNC_PASSWORD", "").strip() or None
+    vesync_country_code = environ.get("VESYNC_COUNTRY_CODE", "DE").strip()
+    vesync_time_zone = environ.get(
+        "VESYNC_TIME_ZONE",
+        "Europe/Berlin",
+    ).strip()
+    uses_vesync = any(
+        room.humidifier_provider is HumidifierProviderKind.VESYNC
+        for room in home.rooms
+    )
+    if uses_vesync and (
+        vesync_username is None
+        or vesync_password is None
+        or not vesync_country_code
+        or not vesync_time_zone
+    ):
+        raise RoomControlApplicationError(
+            "MISSING_VESYNC_CONFIGURATION",
+            "VeSync credentials and regional settings are required.",
         )
 
     return RoomControlApplicationConfig(
@@ -117,6 +153,11 @@ def load_room_control_config(
         home=home,
         humidifier_on_below=humidifier_on_below,
         humidifier_off_at=humidifier_off_at,
+        vesync_username=vesync_username,
+        vesync_password=vesync_password,
+        vesync_country_code=vesync_country_code,
+        vesync_time_zone=vesync_time_zone,
+        vesync_timeout_seconds=vesync_timeout_seconds,
     )
 
 
@@ -251,6 +292,17 @@ def _build_humidifier_provider(
             plug_device_id=room.humidifier_device_id,
             timestamp_ms=timestamp_ms,
             nonce_factory=nonce_factory,
+        )
+    if room.humidifier_provider is HumidifierProviderKind.VESYNC:
+        assert config.vesync_username is not None
+        assert config.vesync_password is not None
+        return VeSyncHumidifierProvider(
+            username=config.vesync_username,
+            password=config.vesync_password,
+            humidifier_device_id=room.humidifier_device_id,
+            country_code=config.vesync_country_code,
+            time_zone=config.vesync_time_zone,
+            timeout_seconds=config.vesync_timeout_seconds,
         )
     assert room.humidifier_provider is not None
     assert room.humidifier_device_id is not None

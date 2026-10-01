@@ -1,10 +1,11 @@
 from datetime import datetime
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
 
 from smart_home_qa_harness.humidifier_provider import (
+    HumidifierProviderError,
     HumidifierProviderStatus,
     HumidifierState,
 )
@@ -133,7 +134,7 @@ def test_does_not_fetch_weather_outside_ventilation_period():
 def test_unavailable_provider_is_isolated_to_its_room():
     environ = {
         **ENVIRON,
-        "ROOM_1_HUMIDIFIER_PROVIDER": "vesync",
+        "ROOM_1_HUMIDIFIER_PROVIDER": "tinytuya-ir",
         "ROOM_2_HUMIDIFIER_PROVIDER": "tinytuya-ir",
         "ROOM_2_HUMIDIFIER_DEVICE_ID": "remote-living",
     }
@@ -159,6 +160,110 @@ def test_unavailable_provider_is_isolated_to_its_room():
         result.humidifiers[1].error_code
         == "UNSUPPORTED_HUMIDIFIER_PROVIDER"
     )
+
+
+def test_vesync_room_requires_credentials():
+    environ = {
+        **ENVIRON,
+        "ROOM_1_HUMIDIFIER_PROVIDER": "vesync",
+    }
+
+    with pytest.raises(RoomControlApplicationError) as captured:
+        load_room_control_config(environ)
+
+    assert captured.value.code == "MISSING_VESYNC_CONFIGURATION"
+
+
+@patch(
+    "smart_home_qa_harness.room_control_application."
+    "VeSyncHumidifierProvider"
+)
+def test_builds_vesync_provider_for_configured_room(vesync_provider):
+    environ = {
+        **ENVIRON,
+        "ROOM_1_HUMIDIFIER_PROVIDER": "vesync",
+        "VESYNC_USERNAME": "parent@example.com",
+        "VESYNC_PASSWORD": "secret",
+        "VESYNC_COUNTRY_CODE": "DE",
+        "VESYNC_TIME_ZONE": "Europe/Berlin",
+        "VESYNC_TIMEOUT_SECONDS": "12",
+    }
+    target = fake_provider()
+    target.provider_name = "vesync"
+    target.device_id = "plug-children"
+    target.read_status.return_value = HumidifierProviderStatus(
+        "vesync",
+        "plug-children",
+        HumidifierState.OFF,
+        True,
+    )
+    vesync_provider.return_value = target
+
+    result = run_room_control_cycle(
+        config=load_room_control_config(environ),
+        current_datetime=datetime(
+            2026, 9, 26, 20, 0, tzinfo=ZoneInfo("Europe/Berlin")
+        ),
+        meter_reader=meter_reader,
+        weather_provider=Mock(return_value=WeatherData(18, "now", 27)),
+    )
+
+    assert result.humidifiers[0].provider_name == "vesync"
+    vesync_provider.assert_called_once_with(
+        username="parent@example.com",
+        password="secret",
+        humidifier_device_id="plug-children",
+        country_code="DE",
+        time_zone="Europe/Berlin",
+        timeout_seconds=12.0,
+    )
+
+
+def test_vesync_auth_failure_does_not_block_another_room_provider():
+    environ = {
+        **ENVIRON,
+        "ROOM_1_HUMIDIFIER_PROVIDER": "vesync",
+        "VESYNC_USERNAME": "parent@example.com",
+        "VESYNC_PASSWORD": "secret",
+        "ROOM_2_HUMIDIFIER_PROVIDER": "switchbot-plug",
+        "ROOM_2_HUMIDIFIER_DEVICE_ID": "plug-living",
+    }
+    vesync = Mock(
+        provider_name="vesync",
+        device_id="plug-children",
+    )
+    vesync.read_status.side_effect = HumidifierProviderError(
+        "VESYNC_AUTHENTICATION_FAILED",
+        "authentication failed",
+        False,
+    )
+    switchbot = Mock(
+        provider_name="switchbot-plug",
+        device_id="plug-living",
+    )
+    switchbot.read_status.return_value = HumidifierProviderStatus(
+        "switchbot-plug",
+        "plug-living",
+        HumidifierState.OFF,
+        True,
+    )
+
+    result = run_room_control_cycle(
+        config=load_room_control_config(environ),
+        current_datetime=datetime(
+            2026, 9, 26, 20, 0, tzinfo=ZoneInfo("Europe/Berlin")
+        ),
+        meter_reader=meter_reader,
+        weather_provider=Mock(return_value=WeatherData(18, "now", 27)),
+        humidifier_provider_factory=lambda room: (
+            vesync if room.room_id == "children-room" else switchbot
+        ),
+    )
+
+    assert result.humidifiers[0].error_code == "VESYNC_AUTHENTICATION_FAILED"
+    assert result.humidifiers[1].room_id == "living-room"
+    assert result.humidifiers[1].error_code is None
+    assert result.humidifiers[1].desired_state is HumidifierState.ON
 
 
 def test_rejects_naive_datetime():

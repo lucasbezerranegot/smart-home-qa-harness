@@ -9,6 +9,8 @@ description = "QA automation harness for smart-home environmental controls"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "aiohttp>=3.11,<4",
+    "pyvesync>=3.4.2,<4",
     "requests>=2.32,<3",
 ]
 

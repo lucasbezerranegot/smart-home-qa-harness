@@ -104,6 +104,15 @@ class HomeRoomConfig:
                 if room.humidifier_device_id is not None
             ],
         )
+        for room in self.rooms:
+            if (
+                room.humidifier_provider is HumidifierProviderKind.VESYNC
+                and room.room_id != "children-room"
+            ):
+                raise RoomConfigurationError(
+                    "INVALID_VESYNC_ROOM_BINDING",
+                    "The VeSync humidifier may only be assigned to children-room.",
+                )
 
     @property
     def ventilation_rooms(self) -> tuple[RoomConfig, ...]:
