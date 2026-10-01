@@ -105,8 +105,8 @@ The reservation is persisted **before** the webhook. This favors avoiding duplic
 Current local result:
 
 ```text
-155 passed
-98.99% total line/branch coverage
+417 passed
+93.59% total line/branch coverage
 100% orchestrator coverage
 ```
 
@@ -222,6 +222,47 @@ docker run --rm \
 
 The smoke test is intentionally excluded from CI because it requires secrets, internet access, and online hardware.
 
+## Room-aware ventilation and humidifier control
+
+The room-aware path uses the numbered `ROOM_*` registry in `.env`. Every room
+has exactly one Meter. `HAS_WINDOW=true` opts a room into ventilation, while
+`HUMIDIFIER_PROVIDER` plus `HUMIDIFIER_DEVICE_ID` opt it into humidifier
+control. This keeps the physical room/device mapping separate from the rules
+that consume it. The room-level controller uses one provider-neutral contract;
+the SwitchBot Plug Mini is its first adapter.
+
+One cycle reads every configured Meter once. During a ventilation period it
+evaluates every room with a window and groups all matching rooms into one
+recommendation. A missing room reading is reported without preventing valid
+rooms from being evaluated. The current production Alexa runner remains on the
+legacy single-room path until dynamic room announcements are configured.
+
+Humidifiers are allowed during the nap period `[11:30, 14:00)` and the
+cross-midnight night period `[19:00, 08:00)`. They turn on below 45% relative
+humidity, turn off at or above 50%, and retain their previous state between
+those limits. Outside the allowed periods, or when the Meter reading is
+unavailable, the safe desired state is off.
+
+The new runner is dry-run by default:
+
+```bash
+PYTHONPATH=src python scripts/run_room_control.py
+```
+
+Real plug commands require the explicit environment gate:
+
+```bash
+ALLOW_REAL_HUMIDIFIER_COMMANDS=true \
+  PYTHONPATH=src python scripts/run_room_control.py
+```
+
+After a command, the controller reads the plug status again and reports
+`HUMIDIFIER_STATE_NOT_CONFIRMED` if the provider does not confirm the requested
+physical state.
+The Plug Mini's instantaneous power is recorded for future calibration only.
+This version intentionally does not interpret low power as an empty water tank
+and does not send a water notification.
+
 ## Heating relay dry-run and controlled command
 
 Enable and configure the required `HEATING_ZONE_*` entries in `.env`. Disabled
@@ -326,6 +367,15 @@ The complete path has been manually verified against real hardware and services:
 src/smart_home_qa_harness/
 ├── application.py                 # Configuration and application wiring
 ├── decision_engine.py             # Pure window decision rules
+├── room_config.py                  # Shared room-to-device registry
+├── ventilation_engine.py           # Room-aware ventilation decisions
+├── room_ventilation_control.py     # Multi-room aggregation and failures
+├── humidifier_engine.py            # Schedule and humidity hysteresis
+├── humidifier_control.py           # Safe plug command orchestration
+├── humidifier_provider.py          # Provider-neutral control contract
+├── switchbot_plug_client.py        # Plug Mini EU status and commands
+├── switchbot_humidifier_provider.py # SwitchBot implementation of the contract
+├── room_control_application.py     # Shared Meter reads and controller wiring
 ├── inside_environment_client.py   # Static and SwitchBot providers
 ├── orchestrator.py                # Safe workflow and deduplication
 ├── notification_store.py          # Persistent JSON reservation adapter
@@ -337,6 +387,7 @@ tests/integration/                  # Real component wiring with mocked HTTP
 deploy/systemd/                     # Local service and timer examples
 Dockerfile.runtime                  # Production image, dependencies installed once
 scripts/run_scheduled_control.py    # One non-interactive control cycle
+scripts/run_room_control.py         # Dry-run-first room-aware control cycle
 scripts/smoke_test_switchbot.py     # Manual read-only hardware verification
 scripts/smoke_test_end_to_end.py    # Opt-in Alexa end-to-end verification
 .github/workflows/qa_pipeline.yml   # CI quality gate
@@ -350,6 +401,8 @@ Planned improvements:
 
 - outdoor humidity/dew-point comparison for more informed winter ventilation;
 - room-specific winter comfort temperatures and closing reminders;
+- calibrated humidifier load detection and low-water notifications;
+- dynamic Alexa announcements containing the affected room names;
 - notification delivery recovery and state retention/concurrency improvements;
 - structured logging and operational monitoring;
 - integration with the installed SwitchBot radiator thermostats.
