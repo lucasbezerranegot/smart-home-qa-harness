@@ -70,6 +70,12 @@ def test_one_cycle_reuses_room_registry_for_ventilation_and_humidifier():
     )
     target = fake_provider()
 
+    assert config.vesync_username is None
+    assert config.vesync_password is None
+    assert config.vesync_country_code is None
+    assert config.vesync_time_zone is None
+    assert config.vesync_timeout_seconds is None
+
     result = run_room_control_cycle(
         config=config,
         current_datetime=datetime(
@@ -162,16 +168,50 @@ def test_unavailable_provider_is_isolated_to_its_room():
     )
 
 
-def test_vesync_room_requires_credentials():
+@pytest.mark.parametrize(
+    "missing_key",
+    [
+        "VESYNC_USERNAME",
+        "VESYNC_PASSWORD",
+        "VESYNC_COUNTRY_CODE",
+        "VESYNC_TIME_ZONE",
+        "VESYNC_TIMEOUT_SECONDS",
+    ],
+)
+def test_vesync_room_requires_every_environment_setting(missing_key):
     environ = {
         **ENVIRON,
         "ROOM_1_HUMIDIFIER_PROVIDER": "vesync",
+        "VESYNC_USERNAME": "parent@example.com",
+        "VESYNC_PASSWORD": "secret",
+        "VESYNC_COUNTRY_CODE": "DE",
+        "VESYNC_TIME_ZONE": "Europe/Berlin",
+        "VESYNC_TIMEOUT_SECONDS": "15",
     }
+    del environ[missing_key]
 
     with pytest.raises(RoomControlApplicationError) as captured:
         load_room_control_config(environ)
 
     assert captured.value.code == "MISSING_VESYNC_CONFIGURATION"
+
+
+@pytest.mark.parametrize("timeout", ["zero", "0", "nan"])
+def test_vesync_timeout_must_be_valid(timeout):
+    environ = {
+        **ENVIRON,
+        "ROOM_1_HUMIDIFIER_PROVIDER": "vesync",
+        "VESYNC_USERNAME": "parent@example.com",
+        "VESYNC_PASSWORD": "secret",
+        "VESYNC_COUNTRY_CODE": "DE",
+        "VESYNC_TIME_ZONE": "Europe/Berlin",
+        "VESYNC_TIMEOUT_SECONDS": timeout,
+    }
+
+    with pytest.raises(RoomControlApplicationError) as captured:
+        load_room_control_config(environ)
+
+    assert captured.value.code == "INVALID_VESYNC_CONFIGURATION"
 
 
 @patch(
@@ -225,6 +265,9 @@ def test_vesync_auth_failure_does_not_block_another_room_provider():
         "ROOM_1_HUMIDIFIER_PROVIDER": "vesync",
         "VESYNC_USERNAME": "parent@example.com",
         "VESYNC_PASSWORD": "secret",
+        "VESYNC_COUNTRY_CODE": "DE",
+        "VESYNC_TIME_ZONE": "Europe/Berlin",
+        "VESYNC_TIMEOUT_SECONDS": "15",
         "ROOM_2_HUMIDIFIER_PROVIDER": "switchbot-plug",
         "ROOM_2_HUMIDIFIER_DEVICE_ID": "plug-living",
     }

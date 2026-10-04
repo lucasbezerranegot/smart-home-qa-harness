@@ -36,9 +36,9 @@ class VeSyncHumidifierProvider:
     username: str
     password: str
     humidifier_device_id: str
-    country_code: str = "DE"
-    time_zone: str = "Europe/Berlin"
-    timeout_seconds: float = 15.0
+    country_code: str
+    time_zone: str
+    timeout_seconds: float
     manager_factory: Callable[..., Any] = VeSync
 
     def __post_init__(self) -> None:

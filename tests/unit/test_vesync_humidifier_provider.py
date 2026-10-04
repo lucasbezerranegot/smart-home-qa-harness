@@ -56,6 +56,9 @@ def provider(manager):
         username="parent@example.com",
         password="secret",
         humidifier_device_id="levoit-children",
+        country_code="DE",
+        time_zone="Europe/Berlin",
+        timeout_seconds=15,
         manager_factory=Mock(return_value=manager),
     )
 
@@ -156,6 +159,9 @@ def test_common_controller_rereads_and_reports_unconfirmed_command():
         username="parent@example.com",
         password="secret",
         humidifier_device_id="levoit-children",
+        country_code="DE",
+        time_zone="Europe/Berlin",
+        timeout_seconds=15,
         manager_factory=manager_factory,
     )
     room = RoomConfig(
@@ -228,6 +234,9 @@ def test_rejects_invalid_configuration(overrides):
         "username": "parent@example.com",
         "password": "secret",
         "humidifier_device_id": "levoit-children",
+        "country_code": "DE",
+        "time_zone": "Europe/Berlin",
+        "timeout_seconds": 15,
         **overrides,
     }
 

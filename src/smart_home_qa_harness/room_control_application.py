@@ -55,9 +55,9 @@ class RoomControlApplicationConfig:
     humidifier_off_at: float
     vesync_username: str | None
     vesync_password: str | None
-    vesync_country_code: str
-    vesync_time_zone: str
-    vesync_timeout_seconds: float
+    vesync_country_code: str | None
+    vesync_time_zone: str | None
+    vesync_timeout_seconds: float | None
 
 
 @dataclass(frozen=True)
@@ -96,9 +96,6 @@ def load_room_control_config(
         humidifier_off_at = float(
             environ.get("HUMIDIFIER_OFF_AT", "50")
         )
-        vesync_timeout_seconds = float(
-            environ.get("VESYNC_TIMEOUT_SECONDS", "15")
-        )
         home = load_room_config(environ)
     except KeyError as error:
         raise RoomControlApplicationError(
@@ -115,35 +112,46 @@ def load_room_control_config(
         not token.strip()
         or not secret.strip()
         or not 0 <= humidifier_on_below < humidifier_off_at <= 100
-        or not math.isfinite(vesync_timeout_seconds)
-        or vesync_timeout_seconds <= 0
     ):
         raise RoomControlApplicationError(
             "INVALID_ROOM_CONTROL_CONFIGURATION",
             "Credentials and humidity thresholds must be valid.",
         )
 
-    vesync_username = environ.get("VESYNC_USERNAME", "").strip() or None
-    vesync_password = environ.get("VESYNC_PASSWORD", "").strip() or None
-    vesync_country_code = environ.get("VESYNC_COUNTRY_CODE", "DE").strip()
-    vesync_time_zone = environ.get(
-        "VESYNC_TIME_ZONE",
-        "Europe/Berlin",
-    ).strip()
     uses_vesync = any(
         room.humidifier_provider is HumidifierProviderKind.VESYNC
         for room in home.rooms
     )
-    if uses_vesync and (
-        vesync_username is None
-        or vesync_password is None
-        or not vesync_country_code
-        or not vesync_time_zone
-    ):
-        raise RoomControlApplicationError(
-            "MISSING_VESYNC_CONFIGURATION",
-            "VeSync credentials and regional settings are required.",
+    if uses_vesync:
+        vesync_username = _optional_value(environ, "VESYNC_USERNAME")
+        vesync_password = _optional_value(environ, "VESYNC_PASSWORD")
+        vesync_country_code = _optional_value(
+            environ,
+            "VESYNC_COUNTRY_CODE",
         )
+        vesync_time_zone = _optional_value(environ, "VESYNC_TIME_ZONE")
+        vesync_timeout_raw = _optional_value(
+            environ,
+            "VESYNC_TIMEOUT_SECONDS",
+        )
+        if (
+            vesync_username is None
+            or vesync_password is None
+            or vesync_country_code is None
+            or vesync_time_zone is None
+            or vesync_timeout_raw is None
+        ):
+            raise RoomControlApplicationError(
+                "MISSING_VESYNC_CONFIGURATION",
+                "All VESYNC_* settings are required for a VeSync room.",
+            )
+        vesync_timeout_seconds = _parse_vesync_timeout(vesync_timeout_raw)
+    else:
+        vesync_username = None
+        vesync_password = None
+        vesync_country_code = None
+        vesync_time_zone = None
+        vesync_timeout_seconds = None
 
     return RoomControlApplicationConfig(
         latitude=latitude,
@@ -296,6 +304,9 @@ def _build_humidifier_provider(
     if room.humidifier_provider is HumidifierProviderKind.VESYNC:
         assert config.vesync_username is not None
         assert config.vesync_password is not None
+        assert config.vesync_country_code is not None
+        assert config.vesync_time_zone is not None
+        assert config.vesync_timeout_seconds is not None
         return VeSyncHumidifierProvider(
             username=config.vesync_username,
             password=config.vesync_password,
@@ -310,6 +321,29 @@ def _build_humidifier_provider(
         unavailable_provider_name=room.humidifier_provider.value,
         unavailable_device_id=room.humidifier_device_id,
     )
+
+
+def _optional_value(
+    environ: Mapping[str, str],
+    key: str,
+) -> str | None:
+    return environ.get(key, "").strip() or None
+
+
+def _parse_vesync_timeout(raw_value: str) -> float:
+    try:
+        timeout_seconds = float(raw_value)
+    except (TypeError, ValueError) as error:
+        raise RoomControlApplicationError(
+            "INVALID_VESYNC_CONFIGURATION",
+            "VESYNC_TIMEOUT_SECONDS must be a positive finite number.",
+        ) from error
+    if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+        raise RoomControlApplicationError(
+            "INVALID_VESYNC_CONFIGURATION",
+            "VESYNC_TIMEOUT_SECONDS must be a positive finite number.",
+        )
+    return timeout_seconds
 
 
 @dataclass(frozen=True)

@@ -105,8 +105,8 @@ The reservation is persisted **before** the webhook. This favors avoiding duplic
 Current local result:
 
 ```text
-440 passed
-93.44% total line/branch coverage
+447 passed
+93.54% total line/branch coverage
 100% orchestrator coverage
 ```
 
@@ -269,7 +269,9 @@ For the children's-room Levoit humidifier registered in VeSync, configure
 room other than `children-room`. The adapter also requires `VESYNC_USERNAME`,
 `VESYNC_PASSWORD`, `VESYNC_COUNTRY_CODE`, and `VESYNC_TIME_ZONE`. VeSync is a
 cloud integration, so both the application and humidifier need internet
-access. `VESYNC_TIMEOUT_SECONDS` bounds every cloud operation.
+access. `VESYNC_TIMEOUT_SECONDS` bounds every cloud operation. All five
+`VESYNC_*` values come from runtime environment configuration; the adapter has
+no built-in region, timezone, timeout, username, or password fallback.
 
 The VeSync adapter reads the selected humidifier before a decision, sends only
 the allow-listed power operation when the desired state differs, and reads the
