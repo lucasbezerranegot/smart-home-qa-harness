@@ -42,7 +42,7 @@ These requirements describe the current uncommitted branch work observed on 2026
 | `REQ-ROOM-001` | Maintain a validated shared room and device registry | `room_config.py` and tests | [#22](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/22) |
 | `REQ-VNT-005` | Evaluate and aggregate ventilation recommendations by room | Room-aware engine, aggregation, and tests | [#23](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/23) |
 | `REQ-HUM-001` | Control humidifiers using schedule and humidity hysteresis | Humidifier engine and boundary tests | [#24](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/24) |
-| `REQ-HUM-002` | Apply and confirm SwitchBot Plug Mini humidifier commands | Plug adapter and controller tests | [#25](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/25) |
+| `REQ-HUM-002` | Control living-room Philips humidifiers through SwitchBot plugs | Plug adapter and controller tests | [#25](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/25) |
 | `REQ-ROOM-002` | Run one fault-isolated room-control cycle | Shared Meter reads, partial failures, combined result | [#26](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/26) |
 
 ## Planned
@@ -55,7 +55,13 @@ These requirements describe the current uncommitted branch work observed on 2026
 | `REQ-HEAT-009` | Apply configurable nighttime bedroom temperature profiles | Heating | Product idea | [#30](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/30) |
 | `REQ-HEAT-010` | Integrate installed SwitchBot radiator thermostats | Heating | README roadmap | [#31](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/31) |
 | `REQ-HUM-003` | Detect probable low water from calibrated humidifier power | Humidifier | Branch roadmap | [#32](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/32) |
+| `REQ-HUM-004` | Control the children-room Levoit humidifier through VeSync | Humidifier | Product requirement | [#41](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/41) |
+| `REQ-HUM-005` | Control the bedroom Levoit humidifier through a Tuya infrared remote | Humidifier | Product requirement | [#42](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/42) |
+| `REQ-HUM-006` | Provide a common control interface for humidifier providers | Humidifier | Architecture requirement | [#43](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/43) |
 | `REQ-NTF-003` | Announce the affected room names dynamically | Notifications | Branch roadmap | [#33](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/33) |
 | `REQ-NTF-004` | Recover safely from failed notification delivery | Notifications | README roadmap | [#34](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/34) |
 | `REQ-STATE-001` | Improve state retention and concurrent access safety | State | README roadmap | [#35](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/35) |
 | `REQ-OBS-001` | Provide structured operational logging and monitoring | Observability | README roadmap | [#36](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/36) |
+| `REQ-UI-001` | Provide a mobile-friendly environmental dashboard | UI | Product requirement | [#38](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/38) |
+| `REQ-UI-002` | Make the environmental dashboard installable as a Progressive Web App | UI | Product requirement | [#39](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/39) |
+| `NFR-QA-002` | Verify the environmental dashboard with Playwright | QA | Quality requirement | [#40](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/40) |

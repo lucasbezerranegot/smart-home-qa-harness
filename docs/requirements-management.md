@@ -56,6 +56,7 @@ Supported area codes are:
 | `ROOM` | Room and device configuration |
 | `SAFE` | Cross-cutting safety behavior |
 | `STATE` | Persistent state and concurrency |
+| `UI` | Browser dashboard and installable web experience |
 | `VNT` | Ventilation decisions |
 
 Identifiers are never reused. Renaming a requirement does not change its identifier. A materially different behavior receives a new identifier and links to the superseded requirement.
