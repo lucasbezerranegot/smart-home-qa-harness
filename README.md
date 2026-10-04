@@ -105,8 +105,8 @@ The reservation is persisted **before** the webhook. This favors avoiding duplic
 Current local result:
 
 ```text
-417 passed
-93.59% total line/branch coverage
+459 passed
+93.65% total line/branch coverage
 100% orchestrator coverage
 ```
 
@@ -170,6 +170,28 @@ systemctl --user list-timers smart-home-qa.timer
 journalctl --user -u smart-home-qa.service -n 30 --no-pager
 ```
 
+The room-aware humidifier runner has its own five-minute timer because its
+11:30–14:00 and 19:00–08:00 operating periods differ from the ventilation
+notification schedule. Install it only after real-device verification and
+after explicitly setting `ALLOW_REAL_HUMIDIFIER_COMMANDS=true` in the protected
+runtime `.env`:
+
+```bash
+cp deploy/systemd/smart-home-room-control.{service,timer} \
+  ~/.config/systemd/user/
+systemd-analyze --user verify \
+  ~/.config/systemd/user/smart-home-room-control.{service,timer}
+systemctl --user daemon-reload
+systemctl --user enable --now smart-home-room-control.timer
+systemctl --user list-timers smart-home-room-control.timer
+journalctl --user -u smart-home-room-control.service -n 30 --no-pager
+```
+
+The runner evaluates the time and humidity rules on every invocation. Outside
+the allowed humidifier periods it requests the safe `OFF` state. Disable the
+automation with `systemctl --user disable --now
+smart-home-room-control.timer`.
+
 Linger keeps the user manager available after logout and at boot; it does not prevent PC suspension. A successful oneshot service returns to `inactive (dead)`, while the timer stays `active (waiting)`. Ensure Docker starts at boot. To stop scheduling: `systemctl --user disable --now smart-home-qa.timer`.
 
 ### Controlled release and rollback
@@ -229,7 +251,7 @@ has exactly one Meter. `HAS_WINDOW=true` opts a room into ventilation, while
 `HUMIDIFIER_PROVIDER` plus `HUMIDIFIER_DEVICE_ID` opt it into humidifier
 control. This keeps the physical room/device mapping separate from the rules
 that consume it. The room-level controller uses one provider-neutral contract;
-the SwitchBot Plug Mini is its first adapter.
+SwitchBot Plug Mini and VeSync/Levoit are concrete adapters.
 
 One cycle reads every configured Meter once. During a ventilation period it
 evaluates every room with a window and groups all matching rooms into one
@@ -258,10 +280,31 @@ ALLOW_REAL_HUMIDIFIER_COMMANDS=true \
 
 After a command, the controller reads the plug status again and reports
 `HUMIDIFIER_STATE_NOT_CONFIRMED` if the provider does not confirm the requested
-physical state.
+physical state. Because cloud providers can briefly return stale state, the
+controller retries confirmation after each delay configured in
+`HUMIDIFIER_CONFIRMATION_RETRY_DELAYS_SECONDS` (for example,
+`2,5,10,15`). It stops as soon as the desired state is confirmed; providers
+that cannot confirm physical state are not polled repeatedly.
 The Plug Mini's instantaneous power is recorded for future calibration only.
 This version intentionally does not interpret low power as an empty water tank
 and does not send a water notification.
+
+For the children's-room Levoit humidifier registered in VeSync, configure
+`ROOM_N_HUMIDIFIER_PROVIDER=vesync` and use the device's VeSync CID as
+`ROOM_N_HUMIDIFIER_DEVICE_ID`. The registry rejects VeSync assignments to any
+room other than `children-room`. The adapter also requires `VESYNC_USERNAME`,
+`VESYNC_PASSWORD`, `VESYNC_COUNTRY_CODE`, and `VESYNC_TIME_ZONE`. VeSync is a
+cloud integration, so both the application and humidifier need internet
+access. `VESYNC_TIMEOUT_SECONDS` bounds every cloud operation. All five
+`VESYNC_*` values come from runtime environment configuration; the adapter has
+no built-in region, timezone, timeout, username, or password fallback.
+
+The VeSync adapter reads the selected humidifier before a decision, sends only
+the allow-listed power operation when the desired state differs, and reads the
+device again through the common controller after a command. Authentication,
+timeout, rate-limit, malformed-response, missing-device, offline-device, and
+rejected-command failures are returned as structured error codes. Dry-run is
+still the default and never sends a power command.
 
 ## Heating relay dry-run and controlled command
 
@@ -375,6 +418,7 @@ src/smart_home_qa_harness/
 ├── humidifier_provider.py          # Provider-neutral control contract
 ├── switchbot_plug_client.py        # Plug Mini EU status and commands
 ├── switchbot_humidifier_provider.py # SwitchBot implementation of the contract
+├── vesync_humidifier_provider.py   # Levoit/VeSync implementation
 ├── room_control_application.py     # Shared Meter reads and controller wiring
 ├── inside_environment_client.py   # Static and SwitchBot providers
 ├── orchestrator.py                # Safe workflow and deduplication

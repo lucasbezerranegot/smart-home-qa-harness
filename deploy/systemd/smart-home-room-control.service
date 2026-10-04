@@ -1,0 +1,15 @@
+[Unit]
+Description=Run room-aware ventilation and humidifier control
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/smart-home-qa-harness
+TimeoutStartSec=3min
+
+# Adjust the repository path and UID:GID to match your host before installing.
+ExecStart=/usr/bin/docker run --rm \
+    --user 1000:1000 \
+    --env-file %h/Projects/smart-home-qa-harness/.env \
+    smart-home-qa-harness:runtime \
+    python scripts/run_room_control.py

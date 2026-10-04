@@ -1,7 +1,10 @@
 """Coordinate one room Meter with one provider-neutral humidifier."""
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import time
+import math
+from time import sleep
 
 from smart_home_qa_harness.humidifier_engine import (
     decide_humidifier_state,
@@ -39,12 +42,17 @@ def run_humidifier_control(
     dry_run: bool = True,
     on_below: float = 45.0,
     off_at: float = 50.0,
+    confirmation_retry_delays: Sequence[float] = (),
+    wait: Callable[[float], None] = sleep,
 ) -> HumidifierControlResult:
     """Evaluate and optionally apply one humidifier decision."""
 
     if room.humidifier_provider is None:
         raise ValueError("The room has no humidifier provider configured.")
     _validate_provider_contract(provider)
+    retry_delays = _validated_retry_delays(confirmation_retry_delays)
+    if not callable(wait):
+        raise ValueError("wait must be callable.")
 
     try:
         current_status = _validated_status(provider, provider.read_status())
@@ -118,7 +126,12 @@ def run_humidifier_control(
         )
 
     try:
-        confirmed_status = _validated_status(provider, provider.read_status())
+        confirmed_status = _read_until_confirmed(
+            provider=provider,
+            desired_state=desired_state,
+            retry_delays=retry_delays,
+            wait=wait,
+        )
     except HumidifierProviderError as error:
         return _result(
             room=room,
@@ -155,6 +168,53 @@ def run_humidifier_control(
             else "HUMIDIFIER_STATE_NOT_CONFIRMED"
         ),
     )
+
+
+def _read_until_confirmed(
+    provider: HumidifierProvider,
+    desired_state: HumidifierState,
+    retry_delays: tuple[float, ...],
+    wait: Callable[[float], None],
+) -> HumidifierProviderStatus:
+    status = _validated_status(provider, provider.read_status())
+    if _matches_desired_state(status, desired_state):
+        return status
+
+    for delay in retry_delays:
+        if not status.confirmation_supported:
+            break
+        wait(delay)
+        status = _validated_status(provider, provider.read_status())
+        if _matches_desired_state(status, desired_state):
+            break
+    return status
+
+
+def _matches_desired_state(
+    status: HumidifierProviderStatus,
+    desired_state: HumidifierState,
+) -> bool:
+    return status.state_confirmed and status.reported_state is desired_state
+
+
+def _validated_retry_delays(
+    retry_delays: Sequence[float],
+) -> tuple[float, ...]:
+    if isinstance(retry_delays, (str, bytes)):
+        raise ValueError("confirmation_retry_delays must contain numbers.")
+    try:
+        validated = tuple(float(delay) for delay in retry_delays)
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            "confirmation_retry_delays must contain numbers."
+        ) from error
+    if any(
+        not math.isfinite(delay) or delay <= 0 for delay in validated
+    ):
+        raise ValueError(
+            "confirmation_retry_delays must contain positive finite numbers."
+        )
+    return validated
 
 
 def _result(

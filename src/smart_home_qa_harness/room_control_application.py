@@ -3,6 +3,7 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
+import math
 import uuid
 
 from smart_home_qa_harness.humidifier_control import (
@@ -33,6 +34,9 @@ from smart_home_qa_harness.room_ventilation_control import (
 from smart_home_qa_harness.switchbot_humidifier_provider import (
     SwitchBotPlugHumidifierProvider,
 )
+from smart_home_qa_harness.vesync_humidifier_provider import (
+    VeSyncHumidifierProvider,
+)
 from smart_home_qa_harness.weather_client import (
     WeatherClientError,
     WeatherData,
@@ -49,6 +53,12 @@ class RoomControlApplicationConfig:
     home: HomeRoomConfig
     humidifier_on_below: float
     humidifier_off_at: float
+    humidifier_confirmation_retry_delays_seconds: tuple[float, ...]
+    vesync_username: str | None
+    vesync_password: str | None
+    vesync_country_code: str | None
+    vesync_time_zone: str | None
+    vesync_timeout_seconds: float | None
 
 
 @dataclass(frozen=True)
@@ -87,6 +97,9 @@ def load_room_control_config(
         humidifier_off_at = float(
             environ.get("HUMIDIFIER_OFF_AT", "50")
         )
+        confirmation_retry_delays_raw = environ[
+            "HUMIDIFIER_CONFIRMATION_RETRY_DELAYS_SECONDS"
+        ]
         home = load_room_config(environ)
     except KeyError as error:
         raise RoomControlApplicationError(
@@ -99,6 +112,10 @@ def load_room_control_config(
             "Room control configuration contains an invalid value.",
         ) from error
 
+    humidifier_confirmation_retry_delays_seconds = (
+        _parse_confirmation_retry_delays(confirmation_retry_delays_raw)
+    )
+
     if (
         not token.strip()
         or not secret.strip()
@@ -109,6 +126,41 @@ def load_room_control_config(
             "Credentials and humidity thresholds must be valid.",
         )
 
+    uses_vesync = any(
+        room.humidifier_provider is HumidifierProviderKind.VESYNC
+        for room in home.rooms
+    )
+    if uses_vesync:
+        vesync_username = _optional_value(environ, "VESYNC_USERNAME")
+        vesync_password = _optional_value(environ, "VESYNC_PASSWORD")
+        vesync_country_code = _optional_value(
+            environ,
+            "VESYNC_COUNTRY_CODE",
+        )
+        vesync_time_zone = _optional_value(environ, "VESYNC_TIME_ZONE")
+        vesync_timeout_raw = _optional_value(
+            environ,
+            "VESYNC_TIMEOUT_SECONDS",
+        )
+        if (
+            vesync_username is None
+            or vesync_password is None
+            or vesync_country_code is None
+            or vesync_time_zone is None
+            or vesync_timeout_raw is None
+        ):
+            raise RoomControlApplicationError(
+                "MISSING_VESYNC_CONFIGURATION",
+                "All VESYNC_* settings are required for a VeSync room.",
+            )
+        vesync_timeout_seconds = _parse_vesync_timeout(vesync_timeout_raw)
+    else:
+        vesync_username = None
+        vesync_password = None
+        vesync_country_code = None
+        vesync_time_zone = None
+        vesync_timeout_seconds = None
+
     return RoomControlApplicationConfig(
         latitude=latitude,
         longitude=longitude,
@@ -117,6 +169,14 @@ def load_room_control_config(
         home=home,
         humidifier_on_below=humidifier_on_below,
         humidifier_off_at=humidifier_off_at,
+        humidifier_confirmation_retry_delays_seconds=(
+            humidifier_confirmation_retry_delays_seconds
+        ),
+        vesync_username=vesync_username,
+        vesync_password=vesync_password,
+        vesync_country_code=vesync_country_code,
+        vesync_time_zone=vesync_time_zone,
+        vesync_timeout_seconds=vesync_timeout_seconds,
     )
 
 
@@ -189,6 +249,9 @@ def run_room_control_cycle(
             dry_run=not apply_humidifier_commands,
             on_below=config.humidifier_on_below,
             off_at=config.humidifier_off_at,
+            confirmation_retry_delays=(
+                config.humidifier_confirmation_retry_delays_seconds
+            ),
         )
         for room in config.home.humidifier_rooms
     )
@@ -252,12 +315,71 @@ def _build_humidifier_provider(
             timestamp_ms=timestamp_ms,
             nonce_factory=nonce_factory,
         )
+    if room.humidifier_provider is HumidifierProviderKind.VESYNC:
+        assert config.vesync_username is not None
+        assert config.vesync_password is not None
+        assert config.vesync_country_code is not None
+        assert config.vesync_time_zone is not None
+        assert config.vesync_timeout_seconds is not None
+        return VeSyncHumidifierProvider(
+            username=config.vesync_username,
+            password=config.vesync_password,
+            humidifier_device_id=room.humidifier_device_id,
+            country_code=config.vesync_country_code,
+            time_zone=config.vesync_time_zone,
+            timeout_seconds=config.vesync_timeout_seconds,
+        )
     assert room.humidifier_provider is not None
     assert room.humidifier_device_id is not None
     return _UnavailableHumidifierProvider(
         unavailable_provider_name=room.humidifier_provider.value,
         unavailable_device_id=room.humidifier_device_id,
     )
+
+
+def _optional_value(
+    environ: Mapping[str, str],
+    key: str,
+) -> str | None:
+    return environ.get(key, "").strip() or None
+
+
+def _parse_vesync_timeout(raw_value: str) -> float:
+    try:
+        timeout_seconds = float(raw_value)
+    except (TypeError, ValueError) as error:
+        raise RoomControlApplicationError(
+            "INVALID_VESYNC_CONFIGURATION",
+            "VESYNC_TIMEOUT_SECONDS must be a positive finite number.",
+        ) from error
+    if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+        raise RoomControlApplicationError(
+            "INVALID_VESYNC_CONFIGURATION",
+            "VESYNC_TIMEOUT_SECONDS must be a positive finite number.",
+        )
+    return timeout_seconds
+
+
+def _parse_confirmation_retry_delays(
+    raw_value: str,
+) -> tuple[float, ...]:
+    try:
+        delays = tuple(
+            float(item.strip()) for item in raw_value.split(",")
+        )
+    except (AttributeError, TypeError, ValueError) as error:
+        raise RoomControlApplicationError(
+            "INVALID_HUMIDIFIER_CONFIRMATION_CONFIGURATION",
+            "Humidifier confirmation delays must be comma-separated numbers.",
+        ) from error
+    if not delays or any(
+        not math.isfinite(delay) or delay <= 0 for delay in delays
+    ):
+        raise RoomControlApplicationError(
+            "INVALID_HUMIDIFIER_CONFIRMATION_CONFIGURATION",
+            "Humidifier confirmation delays must be positive finite numbers.",
+        )
+    return delays
 
 
 @dataclass(frozen=True)
