@@ -170,6 +170,28 @@ systemctl --user list-timers smart-home-qa.timer
 journalctl --user -u smart-home-qa.service -n 30 --no-pager
 ```
 
+The room-aware humidifier runner has its own five-minute timer because its
+11:30–14:00 and 19:00–08:00 operating periods differ from the ventilation
+notification schedule. Install it only after real-device verification and
+after explicitly setting `ALLOW_REAL_HUMIDIFIER_COMMANDS=true` in the protected
+runtime `.env`:
+
+```bash
+cp deploy/systemd/smart-home-room-control.{service,timer} \
+  ~/.config/systemd/user/
+systemd-analyze --user verify \
+  ~/.config/systemd/user/smart-home-room-control.{service,timer}
+systemctl --user daemon-reload
+systemctl --user enable --now smart-home-room-control.timer
+systemctl --user list-timers smart-home-room-control.timer
+journalctl --user -u smart-home-room-control.service -n 30 --no-pager
+```
+
+The runner evaluates the time and humidity rules on every invocation. Outside
+the allowed humidifier periods it requests the safe `OFF` state. Disable the
+automation with `systemctl --user disable --now
+smart-home-room-control.timer`.
+
 Linger keeps the user manager available after logout and at boot; it does not prevent PC suspension. A successful oneshot service returns to `inactive (dead)`, while the timer stays `active (waiting)`. Ensure Docker starts at boot. To stop scheduling: `systemctl --user disable --now smart-home-qa.timer`.
 
 ### Controlled release and rollback
