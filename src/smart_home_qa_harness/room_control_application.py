@@ -53,6 +53,7 @@ class RoomControlApplicationConfig:
     home: HomeRoomConfig
     humidifier_on_below: float
     humidifier_off_at: float
+    humidifier_confirmation_retry_delays_seconds: tuple[float, ...]
     vesync_username: str | None
     vesync_password: str | None
     vesync_country_code: str | None
@@ -96,6 +97,9 @@ def load_room_control_config(
         humidifier_off_at = float(
             environ.get("HUMIDIFIER_OFF_AT", "50")
         )
+        confirmation_retry_delays_raw = environ[
+            "HUMIDIFIER_CONFIRMATION_RETRY_DELAYS_SECONDS"
+        ]
         home = load_room_config(environ)
     except KeyError as error:
         raise RoomControlApplicationError(
@@ -107,6 +111,10 @@ def load_room_control_config(
             "INVALID_ROOM_CONTROL_CONFIGURATION",
             "Room control configuration contains an invalid value.",
         ) from error
+
+    humidifier_confirmation_retry_delays_seconds = (
+        _parse_confirmation_retry_delays(confirmation_retry_delays_raw)
+    )
 
     if (
         not token.strip()
@@ -161,6 +169,9 @@ def load_room_control_config(
         home=home,
         humidifier_on_below=humidifier_on_below,
         humidifier_off_at=humidifier_off_at,
+        humidifier_confirmation_retry_delays_seconds=(
+            humidifier_confirmation_retry_delays_seconds
+        ),
         vesync_username=vesync_username,
         vesync_password=vesync_password,
         vesync_country_code=vesync_country_code,
@@ -238,6 +249,9 @@ def run_room_control_cycle(
             dry_run=not apply_humidifier_commands,
             on_below=config.humidifier_on_below,
             off_at=config.humidifier_off_at,
+            confirmation_retry_delays=(
+                config.humidifier_confirmation_retry_delays_seconds
+            ),
         )
         for room in config.home.humidifier_rooms
     )
@@ -344,6 +358,28 @@ def _parse_vesync_timeout(raw_value: str) -> float:
             "VESYNC_TIMEOUT_SECONDS must be a positive finite number.",
         )
     return timeout_seconds
+
+
+def _parse_confirmation_retry_delays(
+    raw_value: str,
+) -> tuple[float, ...]:
+    try:
+        delays = tuple(
+            float(item.strip()) for item in raw_value.split(",")
+        )
+    except (AttributeError, TypeError, ValueError) as error:
+        raise RoomControlApplicationError(
+            "INVALID_HUMIDIFIER_CONFIRMATION_CONFIGURATION",
+            "Humidifier confirmation delays must be comma-separated numbers.",
+        ) from error
+    if not delays or any(
+        not math.isfinite(delay) or delay <= 0 for delay in delays
+    ):
+        raise RoomControlApplicationError(
+            "INVALID_HUMIDIFIER_CONFIRMATION_CONFIGURATION",
+            "Humidifier confirmation delays must be positive finite numbers.",
+        )
+    return delays
 
 
 @dataclass(frozen=True)

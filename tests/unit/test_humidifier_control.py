@@ -1,5 +1,5 @@
 from datetime import time
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import pytest
 
@@ -129,6 +129,51 @@ def test_applies_and_confirms_turn_on():
     assert result.error_code is None
 
 
+def test_retries_stale_provider_state_until_command_is_confirmed():
+    target = provider(
+        status(HumidifierState.OFF),
+        status(HumidifierState.OFF),
+        status(HumidifierState.OFF),
+        status(HumidifierState.ON),
+    )
+    wait = Mock()
+
+    result = run_humidifier(
+        target,
+        humidity=40,
+        confirmation_retry_delays=(2, 5, 10),
+        wait=wait,
+    )
+
+    assert result.reported_state is HumidifierState.ON
+    assert result.state_confirmed is True
+    assert result.error_code is None
+    assert target.read_status.call_count == 4
+    assert wait.call_args_list == [call(2.0), call(5.0)]
+
+
+def test_reports_unconfirmed_state_after_all_retries_are_exhausted():
+    target = provider(
+        status(HumidifierState.OFF),
+        status(HumidifierState.OFF),
+        status(HumidifierState.OFF),
+        status(HumidifierState.OFF),
+    )
+    wait = Mock()
+
+    result = run_humidifier(
+        target,
+        humidity=40,
+        confirmation_retry_delays=(2, 5),
+        wait=wait,
+    )
+
+    assert result.error_code == "HUMIDIFIER_STATE_NOT_CONFIRMED"
+    assert result.state_confirmed is False
+    assert target.read_status.call_count == 4
+    assert wait.call_args_list == [call(2.0), call(5.0)]
+
+
 def test_missing_humidity_turns_running_device_off():
     target = provider(
         status(HumidifierState.ON),
@@ -241,12 +286,34 @@ def test_expected_ir_non_confirmation_is_not_reported_as_provider_failure():
         ),
     )
 
-    result = run_humidifier(target, humidity=40)
+    wait = Mock()
+    result = run_humidifier(
+        target,
+        humidity=40,
+        confirmation_retry_delays=(2, 5),
+        wait=wait,
+    )
 
     assert result.command_succeeded is True
     assert result.reported_state is HumidifierState.ON
     assert result.state_confirmed is False
     assert result.error_code is None
+    wait.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "delays",
+    ["2,5", (0,), (-1,), (float("nan"),), ("later",)],
+)
+def test_rejects_invalid_confirmation_retry_delays(delays):
+    with pytest.raises(ValueError):
+        run_humidifier_control(
+            ROOM,
+            relative_humidity=40,
+            current_time=time(20),
+            provider=provider(status(HumidifierState.OFF)),
+            confirmation_retry_delays=delays,
+        )
 
 
 @pytest.mark.parametrize(
@@ -294,11 +361,12 @@ def test_rejects_room_without_humidifier():
         )
 
 
-def run_humidifier(target, humidity):
+def run_humidifier(target, humidity, **arguments):
     return run_humidifier_control(
         ROOM,
         relative_humidity=humidity,
         current_time=time(20),
         provider=target,
         dry_run=False,
+        **arguments,
     )

@@ -105,8 +105,8 @@ The reservation is persisted **before** the webhook. This favors avoiding duplic
 Current local result:
 
 ```text
-447 passed
-93.54% total line/branch coverage
+459 passed
+93.65% total line/branch coverage
 100% orchestrator coverage
 ```
 
@@ -258,7 +258,11 @@ ALLOW_REAL_HUMIDIFIER_COMMANDS=true \
 
 After a command, the controller reads the plug status again and reports
 `HUMIDIFIER_STATE_NOT_CONFIRMED` if the provider does not confirm the requested
-physical state.
+physical state. Because cloud providers can briefly return stale state, the
+controller retries confirmation after each delay configured in
+`HUMIDIFIER_CONFIRMATION_RETRY_DELAYS_SECONDS` (for example,
+`2,5,10,15`). It stops as soon as the desired state is confirmed; providers
+that cannot confirm physical state are not polled repeatedly.
 The Plug Mini's instantaneous power is recorded for future calibration only.
 This version intentionally does not interpret low power as an empty water tank
 and does not send a water notification.

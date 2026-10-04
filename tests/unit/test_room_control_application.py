@@ -26,6 +26,7 @@ ENVIRON = {
     "WEATHER_LONGITUDE": "11.57",
     "SWITCHBOT_TOKEN": "token",
     "SWITCHBOT_SECRET": "secret",
+    "HUMIDIFIER_CONFIRMATION_RETRY_DELAYS_SECONDS": "2,5,10,15",
     "ROOM_COUNT": "2",
     "ROOM_1_ID": "children-room",
     "ROOM_1_DISPLAY_NAME": "quarto das crianças",
@@ -75,6 +76,12 @@ def test_one_cycle_reuses_room_registry_for_ventilation_and_humidifier():
     assert config.vesync_country_code is None
     assert config.vesync_time_zone is None
     assert config.vesync_timeout_seconds is None
+    assert config.humidifier_confirmation_retry_delays_seconds == (
+        2.0,
+        5.0,
+        10.0,
+        15.0,
+    )
 
     result = run_room_control_cycle(
         config=config,
@@ -212,6 +219,25 @@ def test_vesync_timeout_must_be_valid(timeout):
         load_room_control_config(environ)
 
     assert captured.value.code == "INVALID_VESYNC_CONFIGURATION"
+
+
+@pytest.mark.parametrize(
+    "delays",
+    ["", "two,5", "0,5", "2,-5", "2,nan"],
+)
+def test_humidifier_confirmation_delays_must_be_valid(delays):
+    environ = {
+        **ENVIRON,
+        "HUMIDIFIER_CONFIRMATION_RETRY_DELAYS_SECONDS": delays,
+    }
+
+    with pytest.raises(RoomControlApplicationError) as captured:
+        load_room_control_config(environ)
+
+    assert (
+        captured.value.code
+        == "INVALID_HUMIDIFIER_CONFIRMATION_CONFIGURATION"
+    )
 
 
 @patch(
