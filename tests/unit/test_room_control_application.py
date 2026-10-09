@@ -1,5 +1,5 @@
 from datetime import datetime
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -42,7 +42,11 @@ ENVIRON = {
 
 
 def meter_reader(**arguments):
-    temperatures = {"meter-children": 25.0, "meter-living": 26.0}
+    temperatures = {
+        "meter-children": 25.0,
+        "meter-living": 26.0,
+        "meter-bedroom": 24.0,
+    }
     return IndoorEnvironmentData(
         temperature=temperatures[arguments["device_id"]],
         relative_humidity=40.0,
@@ -144,37 +148,6 @@ def test_does_not_fetch_weather_outside_ventilation_period():
     assert result.ventilation.recommendations == ()
 
 
-def test_unavailable_provider_is_isolated_to_its_room():
-    environ = {
-        **ENVIRON,
-        "ROOM_1_HUMIDIFIER_PROVIDER": "tinytuya-ir",
-        "ROOM_2_HUMIDIFIER_PROVIDER": "tinytuya-ir",
-        "ROOM_2_HUMIDIFIER_DEVICE_ID": "remote-living",
-    }
-
-    result = run_room_control_cycle(
-        config=load_room_control_config(environ),
-        current_datetime=datetime(
-            2026, 9, 26, 20, 0, tzinfo=ZoneInfo("Europe/Berlin")
-        ),
-        meter_reader=meter_reader,
-        weather_provider=Mock(return_value=WeatherData(18, "now", 27)),
-        humidifier_provider_factory=None,
-    )
-
-    assert len(result.humidifiers) == 2
-    assert result.humidifiers[0].room_id == "children-room"
-    assert (
-        result.humidifiers[0].error_code
-        == "UNSUPPORTED_HUMIDIFIER_PROVIDER"
-    )
-    assert result.humidifiers[1].room_id == "living-room"
-    assert (
-        result.humidifiers[1].error_code
-        == "UNSUPPORTED_HUMIDIFIER_PROVIDER"
-    )
-
-
 @pytest.mark.parametrize(
     "missing_key",
     [
@@ -244,26 +217,41 @@ def test_humidifier_confirmation_delays_must_be_valid(delays):
     "smart_home_qa_harness.room_control_application."
     "VeSyncHumidifierProvider"
 )
-def test_builds_vesync_provider_for_configured_room(vesync_provider):
+def test_builds_one_vesync_provider_per_configured_room(vesync_provider):
     environ = {
         **ENVIRON,
         "ROOM_1_HUMIDIFIER_PROVIDER": "vesync",
+        "ROOM_1_HUMIDIFIER_DEVICE_ID": "levoit-children",
+        "ROOM_2_ID": "bedroom",
+        "ROOM_2_DISPLAY_NAME": "quarto",
+        "ROOM_2_METER_ID": "meter-bedroom",
+        "ROOM_2_HUMIDIFIER_PROVIDER": "vesync",
+        "ROOM_2_HUMIDIFIER_DEVICE_ID": "levoit-bedroom",
         "VESYNC_USERNAME": "parent@example.com",
         "VESYNC_PASSWORD": "secret",
         "VESYNC_COUNTRY_CODE": "DE",
         "VESYNC_TIME_ZONE": "Europe/Berlin",
         "VESYNC_TIMEOUT_SECONDS": "12",
     }
-    target = fake_provider()
-    target.provider_name = "vesync"
-    target.device_id = "plug-children"
-    target.read_status.return_value = HumidifierProviderStatus(
+    children = fake_provider()
+    children.provider_name = "vesync"
+    children.device_id = "levoit-children"
+    children.read_status.return_value = HumidifierProviderStatus(
         "vesync",
-        "plug-children",
+        "levoit-children",
         HumidifierState.OFF,
         True,
     )
-    vesync_provider.return_value = target
+    bedroom = fake_provider()
+    bedroom.provider_name = "vesync"
+    bedroom.device_id = "levoit-bedroom"
+    bedroom.read_status.return_value = HumidifierProviderStatus(
+        "vesync",
+        "levoit-bedroom",
+        HumidifierState.OFF,
+        True,
+    )
+    vesync_provider.side_effect = [children, bedroom]
 
     result = run_room_control_cycle(
         config=load_room_control_config(environ),
@@ -274,45 +262,62 @@ def test_builds_vesync_provider_for_configured_room(vesync_provider):
         weather_provider=Mock(return_value=WeatherData(18, "now", 27)),
     )
 
-    assert result.humidifiers[0].provider_name == "vesync"
-    vesync_provider.assert_called_once_with(
-        username="parent@example.com",
-        password="secret",
-        humidifier_device_id="plug-children",
-        country_code="DE",
-        time_zone="Europe/Berlin",
-        timeout_seconds=12.0,
-    )
+    assert [item.room_id for item in result.humidifiers] == [
+        "children-room",
+        "bedroom",
+    ]
+    assert vesync_provider.call_args_list == [
+        call(
+            username="parent@example.com",
+            password="secret",
+            humidifier_device_id="levoit-children",
+            country_code="DE",
+            time_zone="Europe/Berlin",
+            timeout_seconds=12.0,
+        ),
+        call(
+            username="parent@example.com",
+            password="secret",
+            humidifier_device_id="levoit-bedroom",
+            country_code="DE",
+            time_zone="Europe/Berlin",
+            timeout_seconds=12.0,
+        ),
+    ]
 
 
-def test_vesync_auth_failure_does_not_block_another_room_provider():
+def test_one_vesync_failure_does_not_block_the_other_vesync_room():
     environ = {
         **ENVIRON,
         "ROOM_1_HUMIDIFIER_PROVIDER": "vesync",
+        "ROOM_1_HUMIDIFIER_DEVICE_ID": "levoit-children",
         "VESYNC_USERNAME": "parent@example.com",
         "VESYNC_PASSWORD": "secret",
         "VESYNC_COUNTRY_CODE": "DE",
         "VESYNC_TIME_ZONE": "Europe/Berlin",
         "VESYNC_TIMEOUT_SECONDS": "15",
-        "ROOM_2_HUMIDIFIER_PROVIDER": "switchbot-plug",
-        "ROOM_2_HUMIDIFIER_DEVICE_ID": "plug-living",
+        "ROOM_2_ID": "bedroom",
+        "ROOM_2_DISPLAY_NAME": "quarto",
+        "ROOM_2_METER_ID": "meter-bedroom",
+        "ROOM_2_HUMIDIFIER_PROVIDER": "vesync",
+        "ROOM_2_HUMIDIFIER_DEVICE_ID": "levoit-bedroom",
     }
-    vesync = Mock(
+    children = Mock(
         provider_name="vesync",
-        device_id="plug-children",
+        device_id="levoit-children",
     )
-    vesync.read_status.side_effect = HumidifierProviderError(
-        "VESYNC_AUTHENTICATION_FAILED",
-        "authentication failed",
-        False,
+    children.read_status.side_effect = HumidifierProviderError(
+        "VESYNC_HUMIDIFIER_OFFLINE",
+        "children humidifier offline",
+        True,
     )
-    switchbot = Mock(
-        provider_name="switchbot-plug",
-        device_id="plug-living",
+    bedroom = Mock(
+        provider_name="vesync",
+        device_id="levoit-bedroom",
     )
-    switchbot.read_status.return_value = HumidifierProviderStatus(
-        "switchbot-plug",
-        "plug-living",
+    bedroom.read_status.return_value = HumidifierProviderStatus(
+        "vesync",
+        "levoit-bedroom",
         HumidifierState.OFF,
         True,
     )
@@ -325,12 +330,12 @@ def test_vesync_auth_failure_does_not_block_another_room_provider():
         meter_reader=meter_reader,
         weather_provider=Mock(return_value=WeatherData(18, "now", 27)),
         humidifier_provider_factory=lambda room: (
-            vesync if room.room_id == "children-room" else switchbot
+            children if room.room_id == "children-room" else bedroom
         ),
     )
 
-    assert result.humidifiers[0].error_code == "VESYNC_AUTHENTICATION_FAILED"
-    assert result.humidifiers[1].room_id == "living-room"
+    assert result.humidifiers[0].error_code == "VESYNC_HUMIDIFIER_OFFLINE"
+    assert result.humidifiers[1].room_id == "bedroom"
     assert result.humidifiers[1].error_code is None
     assert result.humidifiers[1].desired_state is HumidifierState.ON
 

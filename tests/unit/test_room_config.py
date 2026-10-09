@@ -72,21 +72,33 @@ def test_loads_generic_humidifier_provider_binding():
     assert result.rooms[0].humidifier_device_id == "levoit-children"
 
 
-def test_rejects_vesync_humidifier_outside_children_room():
+def test_allows_distinct_vesync_humidifiers_in_multiple_rooms():
     environ = {
-        "ROOM_COUNT": "1",
+        "ROOM_COUNT": "2",
         "ROOM_1_ID": "bedroom",
         "ROOM_1_DISPLAY_NAME": "quarto",
         "ROOM_1_METER_ID": "meter-bedroom",
         "ROOM_1_HAS_WINDOW": "true",
         "ROOM_1_HUMIDIFIER_PROVIDER": "vesync",
         "ROOM_1_HUMIDIFIER_DEVICE_ID": "levoit-bedroom",
+        "ROOM_2_ID": "children-room",
+        "ROOM_2_DISPLAY_NAME": "quarto das crianças",
+        "ROOM_2_METER_ID": "meter-children",
+        "ROOM_2_HAS_WINDOW": "true",
+        "ROOM_2_HUMIDIFIER_PROVIDER": "vesync",
+        "ROOM_2_HUMIDIFIER_DEVICE_ID": "levoit-children",
     }
 
-    with pytest.raises(RoomConfigurationError) as captured:
-        load_room_config(environ)
+    result = load_room_config(environ)
 
-    assert captured.value.code == "INVALID_VESYNC_ROOM_BINDING"
+    assert [room.room_id for room in result.humidifier_rooms] == [
+        "bedroom",
+        "children-room",
+    ]
+    assert [room.humidifier_device_id for room in result.humidifier_rooms] == [
+        "levoit-bedroom",
+        "levoit-children",
+    ]
 
 
 def test_rejects_unknown_humidifier_provider_before_runtime():

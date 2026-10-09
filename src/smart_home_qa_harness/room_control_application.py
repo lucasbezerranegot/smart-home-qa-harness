@@ -12,9 +12,6 @@ from smart_home_qa_harness.humidifier_control import (
 )
 from smart_home_qa_harness.humidifier_provider import (
     HumidifierProvider,
-    HumidifierProviderError,
-    HumidifierProviderStatus,
-    HumidifierState,
 )
 from smart_home_qa_harness.inside_environment_client import (
     IndoorEnvironmentData,
@@ -329,12 +326,7 @@ def _build_humidifier_provider(
             time_zone=config.vesync_time_zone,
             timeout_seconds=config.vesync_timeout_seconds,
         )
-    assert room.humidifier_provider is not None
-    assert room.humidifier_device_id is not None
-    return _UnavailableHumidifierProvider(
-        unavailable_provider_name=room.humidifier_provider.value,
-        unavailable_device_id=room.humidifier_device_id,
-    )
+    raise AssertionError("Unsupported configured humidifier provider.")
 
 
 def _optional_value(
@@ -380,33 +372,3 @@ def _parse_confirmation_retry_delays(
             "Humidifier confirmation delays must be positive finite numbers.",
         )
     return delays
-
-
-@dataclass(frozen=True)
-class _UnavailableHumidifierProvider:
-    """Keep one unavailable adapter from interrupting other rooms."""
-
-    unavailable_provider_name: str
-    unavailable_device_id: str
-
-    @property
-    def provider_name(self) -> str:
-        return self.unavailable_provider_name
-
-    @property
-    def device_id(self) -> str:
-        return self.unavailable_device_id
-
-    def read_status(self) -> HumidifierProviderStatus:
-        raise HumidifierProviderError(
-            "UNSUPPORTED_HUMIDIFIER_PROVIDER",
-            f"Provider is not implemented: {self.provider_name}",
-            False,
-        )
-
-    def set_state(self, state: HumidifierState) -> None:
-        raise HumidifierProviderError(
-            "UNSUPPORTED_HUMIDIFIER_PROVIDER",
-            f"Provider is not implemented: {self.provider_name}",
-            False,
-        )
