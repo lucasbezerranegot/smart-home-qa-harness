@@ -289,12 +289,13 @@ The Plug Mini's instantaneous power is recorded for future calibration only.
 This version intentionally does not interpret low power as an empty water tank
 and does not send a water notification.
 
-For the children's-room Levoit humidifier registered in VeSync, configure
-`ROOM_N_HUMIDIFIER_PROVIDER=vesync` and use the device's VeSync CID as
-`ROOM_N_HUMIDIFIER_DEVICE_ID`. The registry rejects VeSync assignments to any
-room other than `children-room`. The adapter also requires `VESYNC_USERNAME`,
+For each Levoit humidifier registered in VeSync, configure
+`ROOM_N_HUMIDIFIER_PROVIDER=vesync` and use that device's distinct VeSync CID
+as `ROOM_N_HUMIDIFIER_DEVICE_ID`. Multiple rooms may share the same VeSync
+account and regional settings, while the room registry prevents one CID from
+being assigned twice. The adapter also requires `VESYNC_USERNAME`,
 `VESYNC_PASSWORD`, `VESYNC_COUNTRY_CODE`, and `VESYNC_TIME_ZONE`. VeSync is a
-cloud integration, so both the application and humidifier need internet
+cloud integration, so the application and both humidifiers need internet
 access. `VESYNC_TIMEOUT_SECONDS` bounds every cloud operation. All five
 `VESYNC_*` values come from runtime environment configuration; the adapter has
 no built-in region, timezone, timeout, username, or password fallback.
@@ -305,6 +306,16 @@ device again through the common controller after a command. Authentication,
 timeout, rate-limit, malformed-response, missing-device, offline-device, and
 rejected-command failures are returned as structured error codes. Dry-run is
 still the default and never sends a power command.
+
+List the humidifiers visible to the configured account without exposing full
+CIDs:
+
+```bash
+docker run --rm \
+  --env-file .env \
+  smart-home-qa-harness:candidate \
+  python scripts/list_vesync_humidifiers.py
+```
 
 ## Heating relay dry-run and controlled command
 
@@ -432,6 +443,7 @@ deploy/systemd/                     # Local service and timer examples
 Dockerfile.runtime                  # Production image, dependencies installed once
 scripts/run_scheduled_control.py    # One non-interactive control cycle
 scripts/run_room_control.py         # Dry-run-first room-aware control cycle
+scripts/list_vesync_humidifiers.py  # Redacted VeSync device discovery
 scripts/smoke_test_switchbot.py     # Manual read-only hardware verification
 scripts/smoke_test_end_to_end.py    # Opt-in Alexa end-to-end verification
 .github/workflows/qa_pipeline.yml   # CI quality gate

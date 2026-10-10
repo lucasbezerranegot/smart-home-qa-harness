@@ -56,8 +56,8 @@ These requirements describe the current uncommitted branch work observed on 2026
 | `REQ-HEAT-010` | Integrate installed SwitchBot radiator thermostats | Heating | README roadmap | [#31](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/31) |
 | `REQ-HUM-003` | Detect probable low water from calibrated humidifier power | Humidifier | Branch roadmap | [#32](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/32) |
 | `REQ-HUM-004` | Control the children-room Levoit humidifier through VeSync | Humidifier | Product requirement | [#41](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/41) |
-| `REQ-HUM-005` | Control the bedroom Levoit humidifier through a Tuya infrared remote | Humidifier | Product requirement | [#42](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/42) |
 | `REQ-HUM-006` | Provide a common control interface for humidifier providers | Humidifier | Architecture requirement | [#43](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/43) |
+| `REQ-HUM-008` | Control the bedroom Levoit 300S through the shared VeSync integration | Humidifier | Superseding product decision | [#42](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/42) |
 | `REQ-NTF-003` | Announce the affected room names dynamically | Notifications | Branch roadmap | [#33](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/33) |
 | `REQ-NTF-004` | Recover safely from failed notification delivery | Notifications | README roadmap | [#34](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/34) |
 | `REQ-STATE-001` | Improve state retention and concurrent access safety | State | README roadmap | [#35](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/35) |
@@ -65,3 +65,9 @@ These requirements describe the current uncommitted branch work observed on 2026
 | `REQ-UI-001` | Provide a mobile-friendly environmental dashboard | UI | Product requirement | [#38](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/38) |
 | `REQ-UI-002` | Make the environmental dashboard installable as a Progressive Web App | UI | Product requirement | [#39](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/39) |
 | `NFR-QA-002` | Verify the environmental dashboard with Playwright | QA | Quality requirement | [#40](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/40) |
+
+## Withdrawn or superseded
+
+| ID | Requirement | Decision | GitHub Issue |
+|---|---|---|---|
+| `REQ-HUM-005` | Control the bedroom Levoit humidifier through a Tuya infrared remote | Superseded by a second VeSync-capable Levoit 300S; TinyTuya is not part of the runtime | [#42](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/42) |

@@ -14,8 +14,8 @@ def test_accepts_confirmed_and_unconfirmed_provider_states():
         True,
     )
     unconfirmed = HumidifierProviderStatus(
-        "tinytuya-ir",
-        "bedroom-remote",
+        "unobservable-provider",
+        "unobservable-device",
         HumidifierState.ON,
         False,
         False,
@@ -27,8 +27,8 @@ def test_accepts_confirmed_and_unconfirmed_provider_states():
 
 def test_accepts_unknown_unconfirmed_state_for_non_observable_provider():
     result = HumidifierProviderStatus(
-        "tinytuya-ir",
-        "bedroom-remote",
+        "unobservable-provider",
+        "unobservable-device",
         None,
         False,
         False,

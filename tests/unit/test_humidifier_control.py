@@ -50,7 +50,7 @@ def provider(*statuses):
     [
         ("switchbot-plug", True),
         ("vesync", True),
-        ("tinytuya-ir", False),
+        ("unobservable-provider", False),
     ],
 )
 def test_common_contract_produces_same_decision_for_every_provider(
