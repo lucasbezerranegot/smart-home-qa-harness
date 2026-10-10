@@ -89,10 +89,10 @@ def load_room_control_config(
         token = environ["SWITCHBOT_TOKEN"]
         secret = environ["SWITCHBOT_SECRET"]
         humidifier_on_below = float(
-            environ.get("HUMIDIFIER_ON_BELOW", "45")
+            environ.get("HUMIDIFIER_ON_BELOW", "52.5")
         )
         humidifier_off_at = float(
-            environ.get("HUMIDIFIER_OFF_AT", "50")
+            environ.get("HUMIDIFIER_OFF_AT", "57.5")
         )
         confirmation_retry_delays_raw = environ[
             "HUMIDIFIER_CONFIRMATION_RETRY_DELAYS_SECONDS"

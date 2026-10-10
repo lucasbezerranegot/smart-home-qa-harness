@@ -26,15 +26,32 @@ def test_outside_sleep_period_is_inactive(current_time):
     assert is_humidification_period(current_time) is False
 
 
-def test_turns_on_below_45_percent_during_sleep_period():
-    assert decide_humidifier_state(44.9, HumidifierState.OFF, time(20)) is HumidifierState.ON
+def test_turns_on_below_comfort_band_during_sleep_period():
+    assert (
+        decide_humidifier_state(52.4, HumidifierState.OFF, time(20))
+        is HumidifierState.ON
+    )
 
 
-def test_turns_off_at_50_percent():
-    assert decide_humidifier_state(50, HumidifierState.ON, time(20)) is HumidifierState.OFF
+def test_lower_comfort_boundary_keeps_previous_state():
+    assert (
+        decide_humidifier_state(52.5, HumidifierState.ON, time(20))
+        is HumidifierState.ON
+    )
+    assert (
+        decide_humidifier_state(52.5, HumidifierState.OFF, time(20))
+        is HumidifierState.OFF
+    )
 
 
-@pytest.mark.parametrize("humidity", [45, 47.5, 49.9])
+def test_turns_off_at_upper_comfort_boundary():
+    assert (
+        decide_humidifier_state(57.5, HumidifierState.ON, time(20))
+        is HumidifierState.OFF
+    )
+
+
+@pytest.mark.parametrize("humidity", [52.5, 55, 57.4])
 def test_hysteresis_keeps_previous_state(humidity):
     assert decide_humidifier_state(humidity, HumidifierState.ON, time(20)) is HumidifierState.ON
     assert decide_humidifier_state(humidity, HumidifierState.OFF, time(20)) is HumidifierState.OFF

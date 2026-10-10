@@ -80,6 +80,8 @@ def test_one_cycle_reuses_room_registry_for_ventilation_and_humidifier():
     assert config.vesync_country_code is None
     assert config.vesync_time_zone is None
     assert config.vesync_timeout_seconds is None
+    assert config.humidifier_on_below == 52.5
+    assert config.humidifier_off_at == 57.5
     assert config.humidifier_confirmation_retry_delays_seconds == (
         2.0,
         5.0,

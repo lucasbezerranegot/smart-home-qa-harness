@@ -6,8 +6,8 @@ import math
 from smart_home_qa_harness.humidifier_provider import HumidifierState
 
 
-HUMIDIFIER_ON_BELOW = 45.0
-HUMIDIFIER_OFF_AT = 50.0
+HUMIDIFIER_ON_BELOW = 52.5
+HUMIDIFIER_OFF_AT = 57.5
 
 
 class HumidifierDecisionError(ValueError):

@@ -260,10 +260,11 @@ rooms from being evaluated. The current production Alexa runner remains on the
 legacy single-room path until dynamic room announcements are configured.
 
 Humidifiers are allowed during the nap period `[11:30, 14:00)` and the
-cross-midnight night period `[19:00, 08:00)`. They turn on below 45% relative
-humidity, turn off at or above 50%, and retain their previous state between
-those limits. Outside the allowed periods, or when the Meter reading is
-unavailable, the safe desired state is off.
+cross-midnight night period `[19:00, 08:00)`. The configured comfort band is
+52.5% through 57.5% relative humidity: humidifiers turn on below 52.5%, turn
+off at or above 57.5%, and retain their previous state between those limits.
+Outside the allowed periods, or when the Meter reading is unavailable, the
+safe desired state is off.
 
 The new runner is dry-run by default:
 
