@@ -1,5 +1,5 @@
 [Unit]
-Description=Run children-room heating control every five minutes
+Description=Run multi-zone heating control every five minutes
 
 [Timer]
 OnCalendar=*-*-* *:0/5:00

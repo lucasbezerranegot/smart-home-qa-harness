@@ -12,3 +12,4 @@ htmlcov/
 .env
 .env.*
 !.env.example
+docs/raspberry-pi-2b-deployment-plan.md

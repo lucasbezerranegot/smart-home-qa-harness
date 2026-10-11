@@ -1,7 +1,10 @@
 from datetime import datetime, timezone
 from unittest.mock import patch
 
+import pytest
+
 from smart_home_qa_harness.heating_application import (
+    HeatingApplicationConfigurationError,
     load_heating_application_config,
     run_switchbot_heating_zone,
 )
@@ -116,3 +119,33 @@ def test_ignores_incomplete_disabled_zones():
     result = load_heating_application_config(environ)
 
     assert [zone.name for zone in result.zones] == ["children-room"]
+
+
+def test_rejects_duplicate_enabled_zone_names():
+    environ = heating_environment()
+    environ["HEATING_ZONE_2_NAME"] = environ["HEATING_ZONE_1_NAME"]
+
+    with pytest.raises(HeatingApplicationConfigurationError) as captured:
+        load_heating_application_config(environ)
+
+    assert captured.value.code == "DUPLICATE_HEATING_ZONE_NAME"
+
+
+def test_rejects_duplicate_enabled_relay_channel_assignments():
+    environ = heating_environment()
+    environ["HEATING_ZONE_2_CHANNEL"] = "1"
+
+    with pytest.raises(HeatingApplicationConfigurationError) as captured:
+        load_heating_application_config(environ)
+
+    assert captured.value.code == "DUPLICATE_HEATING_RELAY_CHANNEL"
+
+
+def test_allows_zones_to_share_a_meter_when_relay_channels_are_distinct():
+    environ = heating_environment()
+    environ["HEATING_ZONE_3_METER_ID"] = environ["HEATING_ZONE_2_METER_ID"]
+
+    result = load_heating_application_config(environ)
+
+    assert result.zones[1].configuration.meter_id == "meter-2"
+    assert result.zones[2].configuration.meter_id == "meter-2"

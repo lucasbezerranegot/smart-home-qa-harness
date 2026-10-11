@@ -355,14 +355,27 @@ docker run --rm -it \
 Do not schedule the `--apply` command until every zone has been verified in
 dry-run mode against its physical relay device, channel, and Meter.
 
-### Scheduled children-room pilot
+### Scheduled multi-zone heating
 
-The scheduled runner is intentionally restricted to a single enabled zone
-named `children-room`. It also requires both
-`HEATING_SCHEDULED_ZONE=children-room` and
-`ALLOW_REAL_HEATING_COMMANDS=true`. Each execution writes one JSON result to
-the systemd journal. The timer runs every five minutes and systemd does not
-start another instance while the oneshot service is still active.
+The scheduled runner controls only zones that are both enabled and present in
+the comma-separated `HEATING_SCHEDULED_ZONES` allowlist. For example:
+
+```text
+HEATING_SCHEDULED_ZONES=shower-bathroom,kitchen,living-room,bathtub-bathroom,bedroom,children-room
+ALLOW_REAL_HEATING_COMMANDS=true
+```
+
+The allowlist must be present and non-empty. Unknown, duplicate, disabled, or
+incompletely configured scheduled zones fail closed before any command is
+sent. Enabled zones not present in the allowlist are not evaluated. Duplicate
+zone names and duplicate Relay ID/channel assignments are also rejected.
+
+Each execution evaluates every scheduled zone independently and writes one
+JSON result per zone to the systemd journal. A failure in one zone does not
+prevent the remaining zones from reaching a safe decision, but the process
+returns a failure status if any zone fails. Real commands still require
+`ALLOW_REAL_HEATING_COMMANDS=true`. The timer runs every five minutes and
+systemd does not start another instance while the oneshot service is active.
 
 Review and install the versioned units only after validating the candidate
 image and one manual real command:
@@ -383,6 +396,9 @@ Emergency stop:
 ```bash
 systemctl --user disable --now smart-home-heating.timer
 ```
+
+After stopping the timer, set `ALLOW_REAL_HEATING_COMMANDS=false` in the
+protected runtime environment before investigating a failure.
 
 ## End-to-end Alexa smoke test
 
