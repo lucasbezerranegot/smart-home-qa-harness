@@ -54,6 +54,7 @@ These requirements describe the current uncommitted branch work observed on 2026
 | `REQ-HEAT-008` | Apply a scheduled bathroom comfort-heating profile | Heating | Product idea | [#29](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/29) |
 | `REQ-HEAT-009` | Apply configurable nighttime bedroom temperature profiles | Heating | Product idea | [#30](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/30) |
 | `REQ-HEAT-010` | Integrate installed SwitchBot radiator thermostats | Heating | README roadmap | [#31](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/31) |
+| `REQ-HEAT-011` | Run guarded scheduled heating control across multiple zones | Heating | Multi-zone rollout | [#46](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/46) |
 | `REQ-HUM-003` | Detect probable low water from calibrated humidifier power | Humidifier | Branch roadmap | [#32](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/32) |
 | `REQ-HUM-004` | Control the children-room Levoit humidifier through VeSync | Humidifier | Product requirement | [#41](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/41) |
 | `REQ-HUM-006` | Provide a common control interface for humidifier providers | Humidifier | Architecture requirement | [#43](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/43) |

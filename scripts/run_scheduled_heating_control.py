@@ -1,4 +1,4 @@
-"""Run one non-interactive production heating cycle for a guarded pilot zone."""
+"""Run one guarded production heating cycle across scheduled zones."""
 
 from datetime import datetime
 import json
@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from smart_home_qa_harness.heating_application import (
     HeatingApplicationConfigurationError,
     load_heating_application_config,
+    load_scheduled_heating_zones,
     run_switchbot_heating_zone,
 )
 
@@ -22,58 +23,62 @@ def main(environ=None, now_factory=None) -> int:
 
     try:
         config = load_heating_application_config(environ)
+        scheduled_zones = load_scheduled_heating_zones(config, environ)
     except HeatingApplicationConfigurationError as error:
         print(json.dumps({"event": "configuration_error", "code": error.code}))
         return 1
 
-    scheduled_zone = environ.get("HEATING_SCHEDULED_ZONE", "")
     real_commands_allowed = (
-        environ.get("ALLOW_REAL_HEATING_COMMANDS", "").lower() == "true"
+        environ.get("ALLOW_REAL_HEATING_COMMANDS", "").strip().lower()
+        == "true"
     )
-    if (
-        len(config.zones) != 1
-        or config.zones[0].name != scheduled_zone
-        or scheduled_zone != "children-room"
-        or not real_commands_allowed
-    ):
+    if not real_commands_allowed:
         print(
             json.dumps(
                 {
-                    "event": "pilot_guard_blocked",
-                    "enabled_zones": [zone.name for zone in config.zones],
-                    "scheduled_zone": scheduled_zone,
+                    "event": "heating_schedule_blocked",
+                    "code": "REAL_HEATING_COMMANDS_NOT_ALLOWED",
                 }
             )
         )
         return 1
 
-    zone = config.zones[0]
     current_datetime = now_factory()
-    result = run_switchbot_heating_zone(
-        application_config=config,
-        zone=zone,
-        current_datetime=current_datetime,
-        dry_run=False,
-    )
-    print(
-        json.dumps(
-            {
+    cycle_failed = False
+    for zone in scheduled_zones:
+        try:
+            result = run_switchbot_heating_zone(
+                application_config=config,
+                zone=zone,
+                current_datetime=current_datetime,
+                dry_run=False,
+            )
+            event = {
                 "event": "heating_cycle",
                 "timestamp": current_datetime.isoformat(),
                 "zone": zone.name,
-                "relay_id": result.relay_id,
-                "channel": result.channel,
-                "meter_id": result.meter_id,
                 "previous_state": getattr(result.previous_state, "value", None),
                 "desired_state": getattr(result.desired_state, "value", None),
                 "command_sent": result.command_sent,
                 "state_confirmed": result.state_confirmed,
                 "error_code": result.error_code,
-            },
-            sort_keys=True,
-        )
-    )
-    return 1 if result.error_code else 0
+            }
+            cycle_failed = cycle_failed or result.error_code is not None
+        except Exception:
+            event = {
+                "event": "heating_cycle",
+                "timestamp": current_datetime.isoformat(),
+                "zone": zone.name,
+                "previous_state": None,
+                "desired_state": None,
+                "command_sent": None,
+                "state_confirmed": False,
+                "error_code": "HEATING_ZONE_EXECUTION_FAILED",
+            }
+            cycle_failed = True
+        print(json.dumps(event, sort_keys=True))
+
+    return 1 if cycle_failed else 0
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 [Unit]
-Description=Run children-room heating control pilot
+Description=Run guarded multi-zone heating control
 After=network-online.target
 
 [Service]
