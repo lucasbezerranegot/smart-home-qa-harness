@@ -62,10 +62,15 @@ These requirements describe the current uncommitted branch work observed on 2026
 | `REQ-NTF-003` | Announce the affected room names dynamically | Notifications | Branch roadmap | [#33](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/33) |
 | `REQ-NTF-004` | Recover safely from failed notification delivery | Notifications | README roadmap | [#34](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/34) |
 | `REQ-STATE-001` | Improve state retention and concurrent access safety | State | README roadmap | [#35](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/35) |
-| `REQ-OBS-001` | Provide structured operational logging and monitoring | Observability | README roadmap | [#36](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/36) |
 | `REQ-UI-001` | Provide a mobile-friendly environmental dashboard | UI | Product requirement | [#38](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/38) |
 | `REQ-UI-002` | Make the environmental dashboard installable as a Progressive Web App | UI | Product requirement | [#39](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/39) |
 | `NFR-QA-002` | Verify the environmental dashboard with Playwright | QA | Quality requirement | [#40](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/40) |
+
+## Implemented on `codex/observability-monitoring`
+
+| ID | Requirement | Evidence summary | GitHub Issue |
+|---|---|---|---|
+| `REQ-OBS-001` | Provide structured operational logging and monitoring | Versioned JSON events across scheduled runners, redacted identifiers, persistent repeated-failure alert state, recovery signaling, tests, and systemd state mounts | [#36](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/36) |
 
 ## Withdrawn or superseded
 

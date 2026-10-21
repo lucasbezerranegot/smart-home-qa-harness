@@ -89,6 +89,64 @@ The injected `FileNotificationStore` writes keys to `.state/notifications.json` 
 
 The reservation is persisted **before** the webhook. This favors avoiding duplicate notifications: if sending fails or the process crashes after reserving, another execution in the same period is suppressed. It does not guarantee delivery or exactly-once behavior. The JSON adapter is intended for one local executor, not concurrent distributed writers; systemd does not start a second instance of the same active service.
 
+## Operational logging and failure alerts
+
+Every scheduled runner writes one JSON object per controlled home, room, or
+heating zone. Schema version `1` has the same required operational fields for
+ventilation, heating, humidifiers, weather, and Meter reads:
+
+```json
+{
+  "schema_version": 1,
+  "event": "operational_cycle",
+  "timestamp": "2026-10-21T05:00:00+02:00",
+  "subsystem": "heating",
+  "zone": "bedroom",
+  "decision": "OFF",
+  "command_status": "not_required",
+  "confirmation_status": "confirmed",
+  "error_code": null,
+  "alert": {
+    "status": "healthy",
+    "consecutive_failures": 0,
+    "notification_required": false
+  }
+}
+```
+
+Only logical room and zone names are logged. Credentials, Meter IDs, relay
+IDs, humidifier CIDs, and provider responses are excluded by construction.
+Optional measurements contain only environmental values.
+
+Set `OPERATIONAL_ALERT_STATE_FILE=/app/.state/operational-alerts.json` and
+mount the host `.state` directory in every scheduled container. After three
+identical consecutive failures by default, `notification_required` becomes
+true once. Further unchanged failures use `ongoing` without requesting another
+notification. The first healthy cycle uses `recovered` and requests one
+recovery notification; later healthy cycles stay quiet. Change the threshold
+with `OPERATIONAL_ALERT_AFTER_CONSECUTIVE_FAILURES`.
+
+The runner exposes this policy as structured data for a journal monitor or a
+future notification adapter; it does not select a dashboard or paging vendor.
+If alert-state parsing or persistence fails, the control result is still
+logged with an `observability_error_code`, and actuator behavior is unchanged.
+
+Useful journal queries:
+
+```bash
+journalctl --user \
+  -u smart-home-qa.service \
+  -u smart-home-room-control.service \
+  -u smart-home-heating.service \
+  --since "24 hours ago" -o cat --no-pager
+
+journalctl --user \
+  -u smart-home-room-control.service \
+  -u smart-home-heating.service \
+  --since "24 hours ago" -o cat --no-pager \
+  | jq 'select(.alert.notification_required == true)'
+```
+
 ## Quality gates
 
 - Python 3.12
@@ -371,7 +429,7 @@ sent. Enabled zones not present in the allowlist are not evaluated. Duplicate
 zone names and duplicate Relay ID/channel assignments are also rejected.
 
 Each execution evaluates every scheduled zone independently and writes one
-JSON result per zone to the systemd journal. A failure in one zone does not
+versioned JSON result per zone to the systemd journal. A failure in one zone does not
 prevent the remaining zones from reaching a safe decision, but the process
 returns a failure status if any zone fails. Real commands still require
 `ALLOW_REAL_HEATING_COMMANDS=true`. The timer runs every five minutes and
@@ -477,5 +535,4 @@ Planned improvements:
 - calibrated humidifier load detection and low-water notifications;
 - dynamic Alexa announcements containing the affected room names;
 - notification delivery recovery and state retention/concurrency improvements;
-- structured logging and operational monitoring;
 - integration with the installed SwitchBot radiator thermostats.

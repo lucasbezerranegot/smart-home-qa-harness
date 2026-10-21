@@ -60,11 +60,17 @@ def test_runs_single_scheduled_zone_non_interactively(run_zone, capsys):
     assert exit_code == 0
     run_zone.assert_called_once()
     assert run_zone.call_args.kwargs["dry_run"] is False
-    event = json.loads(capsys.readouterr().out)
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    event = events[0]
     assert event["zone"] == "children-room"
-    assert event["state_confirmed"] is True
+    assert event["schema_version"] == 1
+    assert event["subsystem"] == "heating"
+    assert event["confirmation_status"] == "confirmed"
+    assert event["command_status"] == "succeeded"
     assert "relay_id" not in event
     assert "meter_id" not in event
+    assert events[1]["home"] == "home"
+    assert events[1]["decision"] == "completed"
 
 
 @patch("scripts.run_scheduled_heating_control.run_switchbot_heating_zone")
@@ -82,7 +88,11 @@ def test_runs_multiple_scheduled_zones_in_allowlist_order(run_zone, capsys):
         "bedroom",
     ]
     events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
-    assert [event["zone"] for event in events] == ["children-room", "bedroom"]
+    assert [event["zone"] for event in events[:-1]] == [
+        "children-room",
+        "bedroom",
+    ]
+    assert events[-1]["decision"] == "completed"
 
 
 @patch("scripts.run_scheduled_heating_control.run_switchbot_heating_zone")
@@ -110,7 +120,7 @@ def test_blocks_scheduled_run_when_real_commands_are_not_allowed(
     assert exit_code == 1
     run_zone.assert_not_called()
     event = json.loads(capsys.readouterr().out)
-    assert event["code"] == "REAL_HEATING_COMMANDS_NOT_ALLOWED"
+    assert event["error_code"] == "REAL_HEATING_COMMANDS_NOT_ALLOWED"
 
 
 @pytest.mark.parametrize(
@@ -141,7 +151,9 @@ def test_invalid_allowlist_fails_closed(
     assert exit_code == 1
     run_zone.assert_not_called()
     event = json.loads(capsys.readouterr().out)
-    assert event == {"event": "configuration_error", "code": expected_code}
+    assert event["event"] == "operational_cycle"
+    assert event["error_code"] == expected_code
+    assert event["command_status"] == "blocked"
 
 
 @patch("scripts.run_scheduled_heating_control.run_switchbot_heating_zone")
@@ -155,7 +167,7 @@ def test_disabled_scheduled_zone_fails_closed(run_zone, capsys):
     assert exit_code == 1
     run_zone.assert_not_called()
     event = json.loads(capsys.readouterr().out)
-    assert event["code"] == "DISABLED_SCHEDULED_HEATING_ZONE"
+    assert event["error_code"] == "DISABLED_SCHEDULED_HEATING_ZONE"
 
 
 @patch("scripts.run_scheduled_heating_control.run_switchbot_heating_zone")
@@ -170,7 +182,7 @@ def test_incomplete_enabled_scheduled_zone_fails_closed(run_zone, capsys):
     assert exit_code == 1
     run_zone.assert_not_called()
     event = json.loads(capsys.readouterr().out)
-    assert event["code"] == "MISSING_HEATING_CONFIGURATION"
+    assert event["error_code"] == "MISSING_HEATING_CONFIGURATION"
 
 
 @patch("scripts.run_scheduled_heating_control.run_switchbot_heating_zone")
@@ -185,7 +197,7 @@ def test_duplicate_relay_channel_fails_closed(run_zone, capsys):
     assert exit_code == 1
     run_zone.assert_not_called()
     event = json.loads(capsys.readouterr().out)
-    assert event["code"] == "DUPLICATE_HEATING_RELAY_CHANNEL"
+    assert event["error_code"] == "DUPLICATE_HEATING_RELAY_CHANNEL"
 
 
 @patch("scripts.run_scheduled_heating_control.run_switchbot_heating_zone")
@@ -202,6 +214,7 @@ def test_continues_after_zone_result_reports_error(run_zone, capsys):
     events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert events[0]["error_code"] == "RELAY_UNAVAILABLE"
     assert events[1]["error_code"] is None
+    assert events[2]["decision"] == "completed_with_errors"
 
 
 @patch("scripts.run_scheduled_heating_control.run_switchbot_heating_zone")
@@ -217,8 +230,9 @@ def test_continues_after_unexpected_zone_exception(run_zone, capsys):
     assert run_zone.call_count == 2
     events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert events[0]["error_code"] == "HEATING_ZONE_EXECUTION_FAILED"
-    assert events[0]["command_sent"] is None
+    assert events[0]["command_status"] == "unknown"
     assert events[1]["error_code"] is None
+    assert events[2]["decision"] == "completed_with_errors"
 
 
 @patch("scripts.run_scheduled_heating_control.run_switchbot_heating_zone")

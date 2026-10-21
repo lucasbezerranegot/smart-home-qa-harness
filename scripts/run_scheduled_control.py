@@ -1,12 +1,9 @@
-"""Run one non-interactive environment-control cycle.
+"""Run one non-interactive environment-control cycle."""
 
-Unlike the manual smoke test, this script never forces a window action and
-does not ask for confirmation. It is intended for scheduled automation.
-"""
-
+from datetime import datetime
+import json
 import os
 import uuid
-from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from smart_home_qa_harness.application import (
@@ -14,31 +11,47 @@ from smart_home_qa_harness.application import (
     load_application_config,
     run_application,
 )
-from smart_home_qa_harness.notification_store import (
-    FileNotificationStore,
+from smart_home_qa_harness.notification_store import FileNotificationStore
+from smart_home_qa_harness.operational_events import (
+    build_operational_event,
+    load_operational_alert_tracker,
 )
 
 
-def main() -> int:
-    """Execute one control cycle and return an operating-system exit code."""
+def main(environ=None, now_factory=None) -> int:
+    """Execute one control cycle and emit one versioned JSON event."""
+
+    environ = os.environ if environ is None else environ
+    now_factory = (
+        (lambda: datetime.now(ZoneInfo("Europe/Berlin")))
+        if now_factory is None
+        else now_factory
+    )
+    current_datetime = now_factory()
+    alert_tracker = load_operational_alert_tracker(environ)
 
     try:
-        config = load_application_config(os.environ)
+        config = load_application_config(environ)
     except ConfigurationError as error:
-        print(f"Configuration error: {error.code} - {error.message}")
+        print(json.dumps(build_operational_event(
+            timestamp=current_datetime,
+            subsystem="ventilation",
+            scope_kind="home",
+            scope="home",
+            decision="configuration_rejected",
+            command_status="blocked",
+            confirmation_status="not_applicable",
+            error_code=error.code,
+            alert_tracker=alert_tracker,
+        ), sort_keys=True))
         return 1
 
-    current_datetime = datetime.now(
-        ZoneInfo("Europe/Berlin"),
-    )
-
     notification_store = FileNotificationStore(
-        path=os.environ.get(
+        path=environ.get(
             "NOTIFICATION_STATE_FILE",
             ".state/notifications.json",
         )
     )
-
     result = run_application(
         config=config,
         current_datetime=current_datetime,
@@ -46,24 +59,30 @@ def main() -> int:
         reserve_notification=notification_store.reserve,
     )
 
-    print(f"Execution time: {current_datetime.isoformat()}")
-    print(f"Decision: {result.action.value}")
-    print(f"Webhook sent: {result.webhook_sent}")
-    print(
-        "Notification suppressed: "
-        f"{result.notification_suppressed}"
-    )
-
-    if result.error_code is not None:
-        print(f"Execution failed: {result.error_code}")
-        return 1
-
     if result.webhook_sent:
-        print("Alexa notification sent successfully.")
+        command_status = "succeeded"
+    elif result.notification_suppressed:
+        command_status = "suppressed"
+    elif result.error_code is not None:
+        command_status = "failed"
     else:
-        print("Execution completed without sending a notification.")
+        command_status = "not_required"
 
-    return 0
+    print(json.dumps(build_operational_event(
+        timestamp=current_datetime,
+        subsystem="ventilation",
+        scope_kind="home",
+        scope="home",
+        decision=result.action.value,
+        command_status=command_status,
+        confirmation_status="not_supported",
+        error_code=result.error_code,
+        alert_tracker=alert_tracker,
+        state={
+            "notification_suppressed": result.notification_suppressed,
+        },
+    ), sort_keys=True))
+    return 1 if result.error_code is not None else 0
 
 
 if __name__ == "__main__":

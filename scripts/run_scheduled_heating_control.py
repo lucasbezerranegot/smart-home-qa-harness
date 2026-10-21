@@ -11,6 +11,10 @@ from smart_home_qa_harness.heating_application import (
     load_scheduled_heating_zones,
     run_switchbot_heating_zone,
 )
+from smart_home_qa_harness.operational_events import (
+    build_operational_event,
+    load_operational_alert_tracker,
+)
 
 
 def main(environ=None, now_factory=None) -> int:
@@ -20,12 +24,24 @@ def main(environ=None, now_factory=None) -> int:
         if now_factory is None
         else now_factory
     )
+    current_datetime = now_factory()
+    alert_tracker = load_operational_alert_tracker(environ)
 
     try:
         config = load_heating_application_config(environ)
         scheduled_zones = load_scheduled_heating_zones(config, environ)
     except HeatingApplicationConfigurationError as error:
-        print(json.dumps({"event": "configuration_error", "code": error.code}))
+        print(json.dumps(build_operational_event(
+            timestamp=current_datetime,
+            subsystem="heating",
+            scope_kind="home",
+            scope="home",
+            decision="configuration_rejected",
+            command_status="blocked",
+            confirmation_status="not_applicable",
+            error_code=error.code,
+            alert_tracker=alert_tracker,
+        ), sort_keys=True))
         return 1
 
     real_commands_allowed = (
@@ -33,17 +49,19 @@ def main(environ=None, now_factory=None) -> int:
         == "true"
     )
     if not real_commands_allowed:
-        print(
-            json.dumps(
-                {
-                    "event": "heating_schedule_blocked",
-                    "code": "REAL_HEATING_COMMANDS_NOT_ALLOWED",
-                }
-            )
-        )
+        print(json.dumps(build_operational_event(
+            timestamp=current_datetime,
+            subsystem="heating",
+            scope_kind="home",
+            scope="home",
+            decision="schedule_blocked",
+            command_status="blocked",
+            confirmation_status="not_applicable",
+            error_code="REAL_HEATING_COMMANDS_NOT_ALLOWED",
+            alert_tracker=alert_tracker,
+        ), sort_keys=True))
         return 1
 
-    current_datetime = now_factory()
     cycle_failed = False
     for zone in scheduled_zones:
         try:
@@ -53,32 +71,61 @@ def main(environ=None, now_factory=None) -> int:
                 current_datetime=current_datetime,
                 dry_run=False,
             )
-            event = {
-                "event": "heating_cycle",
-                "timestamp": current_datetime.isoformat(),
-                "zone": zone.name,
-                "previous_state": getattr(result.previous_state, "value", None),
-                "desired_state": getattr(result.desired_state, "value", None),
-                "command_sent": result.command_sent,
-                "state_confirmed": result.state_confirmed,
-                "error_code": result.error_code,
-            }
+            event = build_operational_event(
+                timestamp=current_datetime,
+                subsystem="heating",
+                scope_kind="zone",
+                scope=zone.name,
+                decision=getattr(result.desired_state, "value", "unavailable"),
+                command_status=_heating_command_status(result),
+                confirmation_status=(
+                    "confirmed" if result.state_confirmed else "unconfirmed"
+                ),
+                error_code=result.error_code,
+                alert_tracker=alert_tracker,
+                state={
+                    "previous": getattr(result.previous_state, "value", None),
+                    "desired": getattr(result.desired_state, "value", None),
+                },
+            )
             cycle_failed = cycle_failed or result.error_code is not None
         except Exception:
-            event = {
-                "event": "heating_cycle",
-                "timestamp": current_datetime.isoformat(),
-                "zone": zone.name,
-                "previous_state": None,
-                "desired_state": None,
-                "command_sent": None,
-                "state_confirmed": False,
-                "error_code": "HEATING_ZONE_EXECUTION_FAILED",
-            }
+            event = build_operational_event(
+                timestamp=current_datetime,
+                subsystem="heating",
+                scope_kind="zone",
+                scope=zone.name,
+                decision="unavailable",
+                command_status="unknown",
+                confirmation_status="unconfirmed",
+                error_code="HEATING_ZONE_EXECUTION_FAILED",
+                alert_tracker=alert_tracker,
+            )
             cycle_failed = True
         print(json.dumps(event, sort_keys=True))
 
+    print(json.dumps(build_operational_event(
+        timestamp=current_datetime,
+        subsystem="heating",
+        scope_kind="home",
+        scope="home",
+        decision=(
+            "completed_with_errors" if cycle_failed else "completed"
+        ),
+        command_status="not_applicable",
+        confirmation_status="not_applicable",
+        error_code=None,
+        alert_tracker=alert_tracker,
+    ), sort_keys=True))
     return 1 if cycle_failed else 0
+
+
+def _heating_command_status(result) -> str:
+    if result.command_sent:
+        return "succeeded" if result.error_code is None else "failed"
+    if result.error_code is not None:
+        return "blocked"
+    return "not_required"
 
 
 if __name__ == "__main__":
