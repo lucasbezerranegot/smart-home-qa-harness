@@ -19,6 +19,7 @@ This catalog is the versioned index of product and quality requirements. The lin
 | `REQ-QA-001` | Provide guarded hardware and end-to-end smoke tests | QA | Read-only and explicit opt-in scripts | [#13](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/13) |
 | `NFR-QA-001` | Enforce the automated quality gate | QA | GitHub Actions, branch coverage threshold | [#14](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/14) |
 | `REQ-OBS-001` | Provide structured operational logging and monitoring | Operations | Versioned redacted events, persistent repeated-failure state and recovery signaling (`ee23508`) | [#36](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/36) |
+| `REQ-STATE-001` | Improve state retention and concurrent access safety | State | Local locks, durable atomic writes, retention and multi-process tests (`2e3797f`) | [#35](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/35) |
 
 ## Delivered through pull request #37
 
@@ -67,11 +68,11 @@ These requirements describe the current uncommitted branch work observed on 2026
 | `REQ-UI-002` | Make the environmental dashboard installable as a Progressive Web App | UI | Product requirement | [#39](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/39) |
 | `NFR-QA-002` | Verify the environmental dashboard with Playwright | QA | Quality requirement | [#40](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/40) |
 
-## In progress on `codex/state-safety`
+## In progress on `codex/ntfy-operational-alerts`
 
 | ID | Requirement | Evidence summary | GitHub Issue |
 |---|---|---|---|
-| `REQ-STATE-001` | Improve state retention and concurrent access safety | Local file locking, durable atomic replacement, bounded reservation retention, safe malformed-state handling, and concurrency tests | [#35](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/35) |
+| `REQ-NTF-005` | Deliver operational failure and recovery notifications through ntfy | Authenticated JSON delivery, Portuguese failure/recovery messages, redacted delivery outcomes, and deterministic adapter/runner tests | [#52](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/52) |
 
 ## Withdrawn or superseded
 

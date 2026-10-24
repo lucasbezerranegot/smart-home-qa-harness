@@ -15,6 +15,10 @@ from smart_home_qa_harness.operational_events import (
     build_operational_event,
     load_operational_alert_tracker,
 )
+from smart_home_qa_harness.ntfy_notifier import load_ntfy_notifier
+from smart_home_qa_harness.operational_notifications import (
+    deliver_operational_notification,
+)
 
 
 def main(environ=None, now_factory=None) -> int:
@@ -26,12 +30,13 @@ def main(environ=None, now_factory=None) -> int:
     )
     current_datetime = now_factory()
     alert_tracker = load_operational_alert_tracker(environ)
+    notifier = load_ntfy_notifier(environ)
 
     try:
         config = load_heating_application_config(environ)
         scheduled_zones = load_scheduled_heating_zones(config, environ)
     except HeatingApplicationConfigurationError as error:
-        print(json.dumps(build_operational_event(
+        _print_event(build_operational_event(
             timestamp=current_datetime,
             subsystem="heating",
             scope_kind="home",
@@ -41,7 +46,7 @@ def main(environ=None, now_factory=None) -> int:
             confirmation_status="not_applicable",
             error_code=error.code,
             alert_tracker=alert_tracker,
-        ), sort_keys=True))
+        ), notifier)
         return 1
 
     real_commands_allowed = (
@@ -49,7 +54,7 @@ def main(environ=None, now_factory=None) -> int:
         == "true"
     )
     if not real_commands_allowed:
-        print(json.dumps(build_operational_event(
+        _print_event(build_operational_event(
             timestamp=current_datetime,
             subsystem="heating",
             scope_kind="home",
@@ -59,7 +64,7 @@ def main(environ=None, now_factory=None) -> int:
             confirmation_status="not_applicable",
             error_code="REAL_HEATING_COMMANDS_NOT_ALLOWED",
             alert_tracker=alert_tracker,
-        ), sort_keys=True))
+        ), notifier)
         return 1
 
     cycle_failed = False
@@ -102,9 +107,9 @@ def main(environ=None, now_factory=None) -> int:
                 alert_tracker=alert_tracker,
             )
             cycle_failed = True
-        print(json.dumps(event, sort_keys=True))
+        _print_event(event, notifier)
 
-    print(json.dumps(build_operational_event(
+    _print_event(build_operational_event(
         timestamp=current_datetime,
         subsystem="heating",
         scope_kind="home",
@@ -116,7 +121,7 @@ def main(environ=None, now_factory=None) -> int:
         confirmation_status="not_applicable",
         error_code=None,
         alert_tracker=alert_tracker,
-    ), sort_keys=True))
+    ), notifier)
     return 1 if cycle_failed else 0
 
 
@@ -126,6 +131,11 @@ def _heating_command_status(result) -> str:
     if result.error_code is not None:
         return "blocked"
     return "not_required"
+
+
+def _print_event(event, notifier) -> None:
+    delivered_event = deliver_operational_notification(event, notifier)
+    print(json.dumps(delivered_event, sort_keys=True, ensure_ascii=False))
 
 
 if __name__ == "__main__":
