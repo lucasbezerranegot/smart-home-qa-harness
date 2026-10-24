@@ -18,6 +18,7 @@ This catalog is the versioned index of product and quality requirements. The lin
 | `REQ-OPS-001` | Run scheduled environmental control locally | Operations | Docker runtime and systemd units | [#12](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/12) |
 | `REQ-QA-001` | Provide guarded hardware and end-to-end smoke tests | QA | Read-only and explicit opt-in scripts | [#13](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/13) |
 | `NFR-QA-001` | Enforce the automated quality gate | QA | GitHub Actions, branch coverage threshold | [#14](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/14) |
+| `REQ-OBS-001` | Provide structured operational logging and monitoring | Operations | Versioned redacted events, persistent repeated-failure state and recovery signaling (`ee23508`) | [#36](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/36) |
 
 ## Delivered through pull request #37
 
@@ -56,21 +57,21 @@ These requirements describe the current uncommitted branch work observed on 2026
 | `REQ-HEAT-010` | Integrate installed SwitchBot radiator thermostats | Heating | README roadmap | [#31](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/31) |
 | `REQ-HEAT-011` | Run guarded scheduled heating control across multiple zones | Heating | Multi-zone rollout | [#46](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/46) |
 | `REQ-HUM-003` | Detect probable low water from calibrated humidifier power | Humidifier | Branch roadmap | [#32](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/32) |
+| `REQ-HUM-007` | Confirm non-API humidifier operation through smart-plug power measurements | Humidifier | Living-room smart-plug installation and calibration prerequisite for low-water inference | [#48](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/48) |
 | `REQ-HUM-004` | Control the children-room Levoit humidifier through VeSync | Humidifier | Product requirement | [#41](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/41) |
 | `REQ-HUM-006` | Provide a common control interface for humidifier providers | Humidifier | Architecture requirement | [#43](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/43) |
 | `REQ-HUM-008` | Control the bedroom Levoit 300S through the shared VeSync integration | Humidifier | Superseding product decision | [#42](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/42) |
 | `REQ-NTF-003` | Announce the affected room names dynamically | Notifications | Branch roadmap | [#33](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/33) |
 | `REQ-NTF-004` | Recover safely from failed notification delivery | Notifications | README roadmap | [#34](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/34) |
-| `REQ-STATE-001` | Improve state retention and concurrent access safety | State | README roadmap | [#35](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/35) |
 | `REQ-UI-001` | Provide a mobile-friendly environmental dashboard | UI | Product requirement | [#38](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/38) |
 | `REQ-UI-002` | Make the environmental dashboard installable as a Progressive Web App | UI | Product requirement | [#39](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/39) |
 | `NFR-QA-002` | Verify the environmental dashboard with Playwright | QA | Quality requirement | [#40](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/40) |
 
-## Implemented on `codex/observability-monitoring`
+## In progress on `codex/state-safety`
 
 | ID | Requirement | Evidence summary | GitHub Issue |
 |---|---|---|---|
-| `REQ-OBS-001` | Provide structured operational logging and monitoring | Versioned JSON events across scheduled runners, redacted identifiers, persistent repeated-failure alert state, recovery signaling, tests, and systemd state mounts | [#36](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/36) |
+| `REQ-STATE-001` | Improve state retention and concurrent access safety | Local file locking, durable atomic replacement, bounded reservation retention, safe malformed-state handling, and concurrency tests | [#35](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/35) |
 
 ## Withdrawn or superseded
 

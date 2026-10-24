@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timezone
 
 import pytest
@@ -8,6 +9,14 @@ from smart_home_qa_harness.operational_events import (
     build_operational_event,
     load_operational_alert_tracker,
 )
+
+
+def _evaluate_shared_alert(path):
+    return FileOperationalAlertTracker(path, 3).evaluate(
+        "heating",
+        "bedroom",
+        "PROVIDER_TIMEOUT",
+    )
 
 
 def test_event_has_versioned_common_schema_and_no_device_identifiers():
@@ -139,3 +148,21 @@ def test_event_rejects_unknown_scope_kind(scope_kind):
 def test_tracker_rejects_invalid_threshold(tmp_path, threshold):
     with pytest.raises(ValueError):
         FileOperationalAlertTracker(tmp_path / "alerts.json", threshold)
+
+
+def test_tracker_serializes_concurrent_failure_updates(tmp_path):
+    path = tmp_path / "alerts.json"
+
+    with ProcessPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(
+            _evaluate_shared_alert,
+            [path] * 24,
+        ))
+
+    assert sum(result.notification_required for result in results) == 1
+    assert max(result.consecutive_failures for result in results) == 24
+    assert json.loads(path.read_text())["entries"]["heating:bedroom"] == {
+        "alerted": True,
+        "consecutive_failures": 24,
+        "error_code": "PROVIDER_TIMEOUT",
+    }

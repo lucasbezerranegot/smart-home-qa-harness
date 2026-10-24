@@ -4,9 +4,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 import json
-import os
 from pathlib import Path
 from typing import Any
+
+from smart_home_qa_harness.file_state import (
+    atomic_write_text,
+    exclusive_state_lock,
+)
 
 
 OPERATIONAL_EVENT_SCHEMA_VERSION = 1
@@ -31,7 +35,7 @@ class AlertEvaluation:
 
 
 class FileOperationalAlertTracker:
-    """Track consecutive failures for one local, non-concurrent executor."""
+    """Track active consecutive failures across local executor processes."""
 
     def __init__(self, path: str | Path, alert_after: int = 3):
         if (
@@ -44,6 +48,23 @@ class FileOperationalAlertTracker:
         self.alert_after = alert_after
 
     def evaluate(
+        self,
+        subsystem: str,
+        scope: str,
+        error_code: str | None,
+    ) -> AlertEvaluation:
+        try:
+            with exclusive_state_lock(self.path):
+                return self._evaluate_locked(subsystem, scope, error_code)
+        except OperationalAlertStateError:
+            raise
+        except OSError as error:
+            raise OperationalAlertStateError(
+                "OPERATIONAL_ALERT_STATE_UNAVAILABLE",
+                "Operational alert state could not be locked or written.",
+            ) from error
+
+    def _evaluate_locked(
         self,
         subsystem: str,
         scope: str,
@@ -117,19 +138,12 @@ class FileOperationalAlertTracker:
         return value
 
     def _save(self, state: Mapping[str, Any]) -> None:
-        temporary_path = self.path.with_suffix(f"{self.path.suffix}.tmp")
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            temporary_path.write_text(
+            atomic_write_text(
+                self.path,
                 json.dumps(state, sort_keys=True),
-                encoding="utf-8",
             )
-            os.replace(temporary_path, self.path)
         except OSError as error:
-            try:
-                temporary_path.unlink(missing_ok=True)
-            except OSError:
-                pass
             raise OperationalAlertStateError(
                 "OPERATIONAL_ALERT_STATE_UNAVAILABLE",
                 "Operational alert state could not be written.",

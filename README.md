@@ -85,9 +85,11 @@ The MVP creates one notification key per date and action period:
 
 The period is derived from the execution time, not from the action: opening windows can now be recommended in either period. Repeated executions suppress additional notifications, allowing at most one reserved attempt per period (up to two per day, not two mandatory notifications).
 
-The injected `FileNotificationStore` writes keys to `.state/notifications.json` using a temporary file followed by replacement. Docker mounts that directory from the host, so state survives container removal and restarts.
+The injected `FileNotificationStore` writes keys to `.state/notifications.json` under an exclusive local file lock. It flushes a uniquely named temporary file before atomically replacing the target, so overlapping local processes cannot both reserve the same key or expose a partially written target. Docker mounts that directory from the host, so state survives container removal and restarts.
 
-The reservation is persisted **before** the webhook. This favors avoiding duplicate notifications: if sending fails or the process crashes after reserving, another execution in the same period is suppressed. It does not guarantee delivery or exactly-once behavior. The JSON adapter is intended for one local executor, not concurrent distributed writers; systemd does not start a second instance of the same active service.
+Well-formed dated reservation keys are retained for 90 days relative to the newest reservation being attempted and then removed on a later reservation. Unrecognized legacy keys are retained rather than deleted during migration. Operational-alert state retains only active failures: an entry is removed after its first healthy recovery evaluation. Persistent `.lock` files contain no application data and may remain in `.state`.
+
+The reservation is persisted **before** the webhook. This favors avoiding duplicate notifications: if sending fails or the process crashes after reserving, another execution in the same period is suppressed. It does not guarantee delivery or exactly-once behavior. The JSON adapter supports concurrent processes on one Linux host. The lock is local to the mounted filesystem; distributed writers on different hosts remain out of scope. systemd also avoids starting a second instance of the same active service.
 
 ## Operational logging and failure alerts
 
@@ -130,6 +132,11 @@ The runner exposes this policy as structured data for a journal monitor or a
 future notification adapter; it does not select a dashboard or paging vendor.
 If alert-state parsing or persistence fails, the control result is still
 logged with an `observability_error_code`, and actuator behavior is unchanged.
+Malformed target files are never overwritten automatically. Stop the relevant
+timers, preserve the invalid file for diagnosis, and move it aside before a
+deliberate safe reset. Orphaned uniquely named `.tmp` files from an interrupted
+pre-replacement write are ignored and may be removed while the timers are
+stopped.
 
 Useful journal queries:
 
