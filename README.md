@@ -129,7 +129,8 @@ recovery notification; later healthy cycles stay quiet. Change the threshold
 with `OPERATIONAL_ALERT_AFTER_CONSECUTIVE_FAILURES`.
 
 The runner exposes this policy as structured data for a journal monitor or a
-future notification adapter; it does not select a dashboard or paging vendor.
+future dashboard. Optional ntfy delivery turns the one-time failure and recovery
+transitions into phone notifications without changing actuator decisions.
 If alert-state parsing or persistence fails, the control result is still
 logged with an `observability_error_code`, and actuator behavior is unchanged.
 Malformed target files are never overwritten automatically. Stop the relevant
@@ -137,6 +138,34 @@ timers, preserve the invalid file for diagnosis, and move it aside before a
 deliberate safe reset. Orphaned uniquely named `.tmp` files from an interrupted
 pre-replacement write are ignored and may be removed while the timers are
 stopped.
+
+### ntfy operational notifications
+
+The scheduled runners can publish authenticated JSON messages to a protected
+ntfy topic. Install the ntfy phone app, reserve a private topic, grant an access
+token permission to publish to it, and subscribe the phone to that topic. Keep
+the topic and token in `.env`; neither value is included in operational events.
+
+```text
+NTFY_ENABLED=true
+NTFY_BASE_URL=https://ntfy.sh
+NTFY_TOPIC=<private-topic>
+NTFY_ACCESS_TOKEN=<publish-capable-token>
+```
+
+When a failure first reaches `OPERATIONAL_ALERT_AFTER_CONSECUTIVE_FAILURES`,
+ntfy receives one high-priority Portuguese notification. Unchanged ongoing
+failures remain quiet. The first healthy cycle after an alerted failure sends
+one normal-priority recovery notification. Each event records only a redacted
+`notification_delivery` result (`succeeded`, `failed`, `disabled`, or
+`not_required`) and a stable error code. A failed request is contained and does
+not change the control result. Durable retries after a failed request belong to
+REQ-NTF-004 and are not yet enabled.
+
+Leave `NTFY_ENABLED=false` until the protected topic, token, and phone
+subscription have all been verified. Enabling with incomplete or invalid
+configuration fails the notification attempt safely with
+`NTFY_CONFIGURATION_INVALID`.
 
 Useful journal queries:
 

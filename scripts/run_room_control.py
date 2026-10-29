@@ -9,6 +9,10 @@ from smart_home_qa_harness.operational_events import (
     build_operational_event,
     load_operational_alert_tracker,
 )
+from smart_home_qa_harness.ntfy_notifier import load_ntfy_notifier
+from smart_home_qa_harness.operational_notifications import (
+    deliver_operational_notification,
+)
 from smart_home_qa_harness.room_control_application import (
     RoomControlApplicationError,
     load_room_control_config,
@@ -25,6 +29,7 @@ def main(environ=None, now_factory=None) -> int:
     )
     current_datetime = now_factory()
     alert_tracker = load_operational_alert_tracker(environ)
+    notifier = load_ntfy_notifier(environ)
     try:
         config = load_room_control_config(environ)
     except RoomControlApplicationError as error:
@@ -38,7 +43,7 @@ def main(environ=None, now_factory=None) -> int:
             confirmation_status="not_applicable",
             error_code=error.code,
             alert_tracker=alert_tracker,
-        ))
+        ), notifier)
         return 1
 
     allow_commands = (
@@ -73,7 +78,7 @@ def main(environ=None, now_factory=None) -> int:
             confirmation_status="not_applicable",
             error_code=error_code,
             alert_tracker=alert_tracker,
-        ))
+        ), notifier)
 
     if result.weather_error_code is not None:
         _print_event(build_operational_event(
@@ -86,7 +91,7 @@ def main(environ=None, now_factory=None) -> int:
             confirmation_status="not_applicable",
             error_code=result.weather_error_code,
             alert_tracker=alert_tracker,
-        ))
+        ), notifier)
     elif result.ventilation.decisions or result.ventilation.failures:
         _print_event(build_operational_event(
             timestamp=current_datetime,
@@ -98,7 +103,7 @@ def main(environ=None, now_factory=None) -> int:
             confirmation_status="not_applicable",
             error_code=None,
             alert_tracker=alert_tracker,
-        ))
+        ), notifier)
 
     for decision in result.ventilation.decisions:
         _print_event(build_operational_event(
@@ -116,7 +121,7 @@ def main(environ=None, now_factory=None) -> int:
                 "relative_humidity_percent": decision.relative_humidity,
             },
             state={"reason": decision.reason.value},
-        ))
+        ), notifier)
     for failure in result.ventilation.failures:
         _print_event(build_operational_event(
             timestamp=current_datetime,
@@ -128,7 +133,7 @@ def main(environ=None, now_factory=None) -> int:
             confirmation_status="not_applicable",
             error_code=failure.error_code,
             alert_tracker=alert_tracker,
-        ))
+        ), notifier)
 
     for item in result.humidifiers:
         _print_event(build_operational_event(
@@ -151,7 +156,7 @@ def main(environ=None, now_factory=None) -> int:
                 "reported": _enum_value(item.reported_state),
                 "dry_run": item.dry_run,
             },
-        ))
+        ), notifier)
 
     cycle_failed = _has_error(result)
     _print_event(build_operational_event(
@@ -164,7 +169,7 @@ def main(environ=None, now_factory=None) -> int:
         confirmation_status="not_applicable",
         error_code=None,
         alert_tracker=alert_tracker,
-    ))
+    ), notifier)
     return 1 if cycle_failed else 0
 
 
@@ -189,8 +194,9 @@ def _has_error(result) -> bool:
     )
 
 
-def _print_event(event) -> None:
-    print(json.dumps(event, sort_keys=True, ensure_ascii=False))
+def _print_event(event, notifier) -> None:
+    delivered_event = deliver_operational_notification(event, notifier)
+    print(json.dumps(delivered_event, sort_keys=True, ensure_ascii=False))
 
 
 if __name__ == "__main__":

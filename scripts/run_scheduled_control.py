@@ -16,6 +16,10 @@ from smart_home_qa_harness.operational_events import (
     build_operational_event,
     load_operational_alert_tracker,
 )
+from smart_home_qa_harness.ntfy_notifier import load_ntfy_notifier
+from smart_home_qa_harness.operational_notifications import (
+    deliver_operational_notification,
+)
 
 
 def main(environ=None, now_factory=None) -> int:
@@ -29,11 +33,12 @@ def main(environ=None, now_factory=None) -> int:
     )
     current_datetime = now_factory()
     alert_tracker = load_operational_alert_tracker(environ)
+    notifier = load_ntfy_notifier(environ)
 
     try:
         config = load_application_config(environ)
     except ConfigurationError as error:
-        print(json.dumps(build_operational_event(
+        _print_event(build_operational_event(
             timestamp=current_datetime,
             subsystem="ventilation",
             scope_kind="home",
@@ -43,7 +48,7 @@ def main(environ=None, now_factory=None) -> int:
             confirmation_status="not_applicable",
             error_code=error.code,
             alert_tracker=alert_tracker,
-        ), sort_keys=True))
+        ), notifier)
         return 1
 
     notification_store = FileNotificationStore(
@@ -68,7 +73,7 @@ def main(environ=None, now_factory=None) -> int:
     else:
         command_status = "not_required"
 
-    print(json.dumps(build_operational_event(
+    _print_event(build_operational_event(
         timestamp=current_datetime,
         subsystem="ventilation",
         scope_kind="home",
@@ -81,8 +86,13 @@ def main(environ=None, now_factory=None) -> int:
         state={
             "notification_suppressed": result.notification_suppressed,
         },
-    ), sort_keys=True))
+    ), notifier)
     return 1 if result.error_code is not None else 0
+
+
+def _print_event(event, notifier) -> None:
+    delivered_event = deliver_operational_notification(event, notifier)
+    print(json.dumps(delivered_event, sort_keys=True, ensure_ascii=False))
 
 
 if __name__ == "__main__":

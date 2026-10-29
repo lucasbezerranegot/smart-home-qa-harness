@@ -3,6 +3,9 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import responses
+
+from smart_home_qa_harness.application import ConfigurationError
 from scripts.run_room_control import main as room_main
 from scripts.run_scheduled_control import main as ventilation_main
 from smart_home_qa_harness.decision_engine import WindowAction
@@ -138,3 +141,40 @@ def test_room_configuration_failure_uses_stable_common_schema(
     assert event["decision"] == "configuration_rejected"
     assert event["command_status"] == "blocked"
     assert event["error_code"] == "MISSING_ROOM_CONTROL_CONFIGURATION"
+
+
+@responses.activate
+@patch("scripts.run_scheduled_control.load_application_config")
+def test_runner_delivers_threshold_alert_through_ntfy(
+    load_config,
+    capsys,
+    tmp_path,
+):
+    load_config.side_effect = ConfigurationError(
+        "MISSING_CONFIGURATION",
+        "safe message",
+        False,
+    )
+    responses.add(responses.POST, "https://ntfy.sh/", status=200)
+    environ = {
+        "OPERATIONAL_ALERT_STATE_FILE": str(tmp_path / "alerts.json"),
+        "OPERATIONAL_ALERT_AFTER_CONSECUTIVE_FAILURES": "1",
+        "NTFY_ENABLED": "true",
+        "NTFY_BASE_URL": "https://ntfy.sh",
+        "NTFY_TOPIC": "private-home-alerts",
+        "NTFY_ACCESS_TOKEN": "secret-access-token",
+    }
+
+    exit_code = ventilation_main(environ, now_factory=lambda: NOW)
+
+    assert exit_code == 1
+    event = json.loads(capsys.readouterr().out)
+    assert event["notification_delivery"] == {
+        "provider": "ntfy",
+        "status": "succeeded",
+        "error_code": None,
+        "retryable": False,
+    }
+    assert len(responses.calls) == 1
+    assert "private-home-alerts" not in json.dumps(event)
+    assert "secret-access-token" not in json.dumps(event)
