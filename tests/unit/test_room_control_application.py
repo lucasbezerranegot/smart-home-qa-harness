@@ -1,5 +1,5 @@
 from datetime import datetime
-from unittest.mock import Mock, call, patch
+from unittest.mock import ANY, Mock, call, patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -88,6 +88,10 @@ def test_one_cycle_reuses_room_registry_for_ventilation_and_humidifier():
         10.0,
         15.0,
     )
+    assert config.humidifier_command_state_file == (
+        ".state/humidifier-commands.json"
+    )
+    assert config.humidifier_confirmation_deadline_seconds == 600
 
     result = run_room_control_cycle(
         config=config,
@@ -215,6 +219,19 @@ def test_humidifier_confirmation_delays_must_be_valid(delays):
     )
 
 
+@pytest.mark.parametrize("deadline", ["zero", "0", "-1", "nan"])
+def test_humidifier_confirmation_deadline_must_be_valid(deadline):
+    environ = {
+        **ENVIRON,
+        "HUMIDIFIER_CONFIRMATION_DEADLINE_SECONDS": deadline,
+    }
+
+    with pytest.raises(RoomControlApplicationError) as captured:
+        load_room_control_config(environ)
+
+    assert captured.value.code == "INVALID_ROOM_CONTROL_CONFIGURATION"
+
+
 @patch(
     "smart_home_qa_harness.room_control_application."
     "VeSyncHumidifierProvider"
@@ -276,6 +293,7 @@ def test_builds_one_vesync_provider_per_configured_room(vesync_provider):
             country_code="DE",
             time_zone="Europe/Berlin",
             timeout_seconds=12.0,
+            cycle_session=ANY,
         ),
         call(
             username="parent@example.com",
@@ -284,8 +302,16 @@ def test_builds_one_vesync_provider_per_configured_room(vesync_provider):
             country_code="DE",
             time_zone="Europe/Berlin",
             timeout_seconds=12.0,
+            cycle_session=ANY,
         ),
     ]
+    first_session = vesync_provider.call_args_list[0].kwargs[
+        "cycle_session"
+    ]
+    second_session = vesync_provider.call_args_list[1].kwargs[
+        "cycle_session"
+    ]
+    assert first_session is second_session
 
 
 def test_one_vesync_failure_does_not_block_the_other_vesync_room():

@@ -2,12 +2,17 @@
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import time
+from datetime import datetime, time, timedelta
 import math
 from time import sleep
 
 from smart_home_qa_harness.humidifier_engine import (
     decide_humidifier_state,
+)
+from smart_home_qa_harness.humidifier_command_state import (
+    FileHumidifierCommandStore,
+    HumidifierCommandStateError,
+    PendingHumidifierCommand,
 )
 from smart_home_qa_harness.humidifier_provider import (
     HumidifierProvider,
@@ -31,6 +36,7 @@ class HumidifierControlResult:
     command_succeeded: bool
     dry_run: bool
     state_confirmed: bool
+    confirmation_pending: bool = False
     error_code: str | None = None
 
 
@@ -44,6 +50,9 @@ def run_humidifier_control(
     off_at: float = 50.0,
     confirmation_retry_delays: Sequence[float] = (),
     wait: Callable[[float], None] = sleep,
+    pending_command_store: FileHumidifierCommandStore | None = None,
+    current_datetime: datetime | None = None,
+    confirmation_deadline_seconds: float = 600,
 ) -> HumidifierControlResult:
     """Evaluate and optionally apply one humidifier decision."""
 
@@ -53,10 +62,41 @@ def run_humidifier_control(
     retry_delays = _validated_retry_delays(confirmation_retry_delays)
     if not callable(wait):
         raise ValueError("wait must be callable.")
+    if pending_command_store is not None:
+        if current_datetime is None or current_datetime.tzinfo is None:
+            raise ValueError(
+                "current_datetime must be timezone-aware with pending state."
+            )
+        if (
+            isinstance(confirmation_deadline_seconds, bool)
+            or not isinstance(confirmation_deadline_seconds, (int, float))
+            or not math.isfinite(confirmation_deadline_seconds)
+            or confirmation_deadline_seconds <= 0
+        ):
+            raise ValueError(
+                "confirmation_deadline_seconds must be positive and finite."
+            )
+
+    pending = _load_pending(room, provider, pending_command_store)
+    if isinstance(pending, HumidifierCommandStateError):
+        return _result(
+            room, provider, relative_humidity, None, None, None,
+            False, False, dry_run, False, error_code=pending.code,
+        )
 
     try:
         current_status = _validated_status(provider, provider.read_status())
     except HumidifierProviderError as error:
+        if pending is not None and current_datetime is not None:
+            return _pending_result(
+                room=room,
+                provider=provider,
+                relative_humidity=relative_humidity,
+                pending=pending,
+                reported_state=None,
+                current_datetime=current_datetime,
+                dry_run=dry_run,
+            )
         return _result(
             room=room,
             provider=provider,
@@ -79,6 +119,52 @@ def run_humidifier_control(
         on_below=on_below,
         off_at=off_at,
     )
+
+    if pending is not None and current_datetime is not None:
+        if (
+            current_status.state_confirmed
+            and current_status.reported_state is pending.desired_state
+        ):
+            state_error = (
+                None
+                if dry_run
+                else _clear_pending(
+                    room, provider, pending_command_store
+                )
+            )
+            if state_error is not None:
+                return _result(
+                    room, provider, relative_humidity, previous_state,
+                    desired_state, current_status.reported_state,
+                    False, False, dry_run, False,
+                    error_code=state_error.code,
+                )
+        elif desired_state is pending.desired_state:
+            return _pending_result(
+                room=room,
+                provider=provider,
+                relative_humidity=relative_humidity,
+                pending=pending,
+                reported_state=current_status.reported_state,
+                current_datetime=current_datetime,
+                dry_run=dry_run,
+                previous_state=previous_state,
+            )
+        else:
+            state_error = (
+                None
+                if dry_run
+                else _clear_pending(
+                    room, provider, pending_command_store
+                )
+            )
+            if state_error is not None:
+                return _result(
+                    room, provider, relative_humidity, previous_state,
+                    desired_state, current_status.reported_state,
+                    False, False, dry_run, False,
+                    error_code=state_error.code,
+                )
 
     if desired_state is current_status.reported_state:
         return _result(
@@ -108,9 +194,42 @@ def run_humidifier_control(
             state_confirmed=False,
         )
 
+    uses_deferred_confirmation = (
+        pending_command_store is not None
+        and current_datetime is not None
+        and provider.provider_name == "vesync"
+    )
+    if uses_deferred_confirmation:
+        try:
+            pending_command_store.reserve(
+                room.room_id,
+                desired_state,
+                current_datetime,
+                current_datetime + timedelta(
+                    seconds=confirmation_deadline_seconds
+                ),
+            )
+        except HumidifierCommandStateError as error:
+            return _result(
+                room, provider, relative_humidity, previous_state,
+                desired_state, current_status.reported_state,
+                False, False, False, False, error_code=error.code,
+            )
+
     try:
         provider.set_state(desired_state)
     except HumidifierProviderError as error:
+        if uses_deferred_confirmation and error.code in {
+            "VESYNC_COMMAND_REJECTED",
+            "INVALID_HUMIDIFIER_STATE",
+        }:
+            state_error = _clear_pending(
+                room, provider, pending_command_store
+            )
+            if state_error is not None:
+                error = state_error
+        # The outcome of a transport failure can be ambiguous. A durable
+        # reservation prevents a blind duplicate command on the next cycle.
         return _result(
             room=room,
             provider=provider,
@@ -123,6 +242,21 @@ def run_humidifier_control(
             dry_run=False,
             state_confirmed=False,
             error_code=error.code,
+        )
+
+    if uses_deferred_confirmation:
+        return _result(
+            room=room,
+            provider=provider,
+            relative_humidity=relative_humidity,
+            previous_state=previous_state,
+            desired_state=desired_state,
+            reported_state=current_status.reported_state,
+            command_attempted=True,
+            command_succeeded=True,
+            dry_run=False,
+            state_confirmed=False,
+            confirmation_pending=True,
         )
 
     try:
@@ -228,6 +362,7 @@ def _result(
     command_succeeded: bool,
     dry_run: bool,
     state_confirmed: bool,
+    confirmation_pending: bool = False,
     error_code: str | None = None,
 ) -> HumidifierControlResult:
     return HumidifierControlResult(
@@ -242,7 +377,57 @@ def _result(
         command_succeeded=command_succeeded,
         dry_run=dry_run,
         state_confirmed=state_confirmed,
+        confirmation_pending=confirmation_pending,
         error_code=error_code,
+    )
+
+
+def _load_pending(room, provider, store):
+    if store is None or provider.provider_name != "vesync":
+        return None
+    try:
+        return store.get(room.room_id)
+    except HumidifierCommandStateError as error:
+        return error
+
+
+def _clear_pending(room, provider, store):
+    if store is None or provider.provider_name != "vesync":
+        return None
+    try:
+        store.clear(room.room_id)
+    except HumidifierCommandStateError as error:
+        return error
+    return None
+
+
+def _pending_result(
+    *,
+    room,
+    provider,
+    relative_humidity,
+    pending: PendingHumidifierCommand,
+    reported_state,
+    current_datetime: datetime,
+    dry_run: bool,
+    previous_state=None,
+):
+    expired = current_datetime >= pending.confirmation_deadline
+    return _result(
+        room=room,
+        provider=provider,
+        relative_humidity=relative_humidity,
+        previous_state=previous_state,
+        desired_state=pending.desired_state,
+        reported_state=reported_state,
+        command_attempted=False,
+        command_succeeded=True,
+        dry_run=dry_run,
+        state_confirmed=False,
+        confirmation_pending=not expired,
+        error_code=(
+            "HUMIDIFIER_STATE_NOT_CONFIRMED" if expired else None
+        ),
     )
 
 

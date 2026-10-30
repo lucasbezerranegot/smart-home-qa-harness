@@ -16,6 +16,7 @@ from smart_home_qa_harness.room_config import (
     RoomConfig,
 )
 from smart_home_qa_harness.vesync_humidifier_provider import (
+    VeSyncCycleSession,
     VeSyncHumidifierProvider,
 )
 
@@ -217,6 +218,103 @@ def test_translates_transport_failures(provider_error, expected_code, retryable)
 
     assert captured.value.code == expected_code
     assert captured.value.retryable is retryable
+
+
+def test_one_cycle_shares_login_and_inventory_across_devices():
+    children = fake_device(cid="levoit-children")
+    bedroom = fake_device(cid="levoit-bedroom")
+    manager = FakeManager([children, bedroom])
+    manager_factory = Mock(return_value=manager)
+
+    with VeSyncCycleSession(
+        username="parent@example.com",
+        password="secret",
+        country_code="DE",
+        time_zone="Europe/Berlin",
+        timeout_seconds=15,
+        manager_factory=manager_factory,
+    ) as session:
+        children_provider = VeSyncHumidifierProvider(
+            "parent@example.com",
+            "secret",
+            "levoit-children",
+            "DE",
+            "Europe/Berlin",
+            15,
+            cycle_session=session,
+        )
+        bedroom_provider = VeSyncHumidifierProvider(
+            "parent@example.com",
+            "secret",
+            "levoit-bedroom",
+            "DE",
+            "Europe/Berlin",
+            15,
+            cycle_session=session,
+        )
+
+        children_provider.read_status()
+        bedroom_provider.read_status()
+
+    manager_factory.assert_called_once_with(
+        username="parent@example.com",
+        password="secret",
+        country_code="DE",
+        time_zone="Europe/Berlin",
+        redact=True,
+    )
+    manager.login.assert_awaited_once_with()
+    manager.get_devices.assert_awaited_once_with()
+    children.update.assert_awaited_once_with()
+    bedroom.update.assert_awaited_once_with()
+
+
+def test_device_failure_does_not_poison_shared_cycle_session():
+    offline = fake_device(
+        cid="levoit-children", connection=ConnectionStatus.OFFLINE
+    )
+    bedroom = fake_device(cid="levoit-bedroom")
+    manager = FakeManager([offline, bedroom])
+
+    with VeSyncCycleSession(
+        username="parent@example.com",
+        password="secret",
+        country_code="DE",
+        time_zone="Europe/Berlin",
+        timeout_seconds=15,
+        manager_factory=Mock(return_value=manager),
+    ) as session:
+        with pytest.raises(HumidifierProviderError) as captured:
+            session.read_status("levoit-children")
+        result = session.read_status("levoit-bedroom")
+
+    assert captured.value.code == "VESYNC_HUMIDIFIER_OFFLINE"
+    assert result.reported_state is HumidifierState.OFF
+    manager.login.assert_awaited_once_with()
+    manager.get_devices.assert_awaited_once_with()
+
+
+def test_shared_initialization_failure_is_not_retried_in_same_cycle():
+    manager = FakeManager()
+    manager.login.side_effect = ClientConnectionError("offline")
+    manager_factory = Mock(return_value=manager)
+
+    with VeSyncCycleSession(
+        username="parent@example.com",
+        password="secret",
+        country_code="DE",
+        time_zone="Europe/Berlin",
+        timeout_seconds=15,
+        manager_factory=manager_factory,
+    ) as session:
+        for device_id in ("levoit-children", "levoit-bedroom"):
+            with pytest.raises(HumidifierProviderError) as captured:
+                session.read_status(device_id)
+            assert captured.value.code == "VESYNC_CONNECTION_ERROR"
+
+    manager_factory.assert_called_once()
+    manager.login.assert_awaited_once_with()
+    manager.get_devices.assert_not_awaited()
 
 
 @pytest.mark.parametrize(

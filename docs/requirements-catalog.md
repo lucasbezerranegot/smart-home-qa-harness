@@ -20,6 +20,7 @@ This catalog is the versioned index of product and quality requirements. The lin
 | `NFR-QA-001` | Enforce the automated quality gate | QA | GitHub Actions, branch coverage threshold | [#14](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/14) |
 | `REQ-OBS-001` | Provide structured operational logging and monitoring | Operations | Versioned redacted events, persistent repeated-failure state and recovery signaling (`ee23508`) | [#36](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/36) |
 | `REQ-STATE-001` | Improve state retention and concurrent access safety | State | Local locks, durable atomic writes, retention and multi-process tests (`2e3797f`) | [#35](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/35) |
+| `REQ-HUM-009` | Stabilize VeSync command confirmation and cycle-level device access | Humidifier | Durable deferred command confirmation, at-most-once actuation and one shared VeSync session/inventory per cycle | [#54](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/54) |
 
 ## Delivered through pull request #37
 
