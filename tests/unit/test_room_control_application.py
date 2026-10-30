@@ -89,7 +89,7 @@ def test_one_cycle_reuses_room_registry_for_ventilation_and_humidifier():
         15.0,
     )
     assert config.humidifier_command_state_file == (
-        "/app/.state/humidifier-commands.json"
+        ".state/humidifier-commands.json"
     )
     assert config.humidifier_confirmation_deadline_seconds == 600
 

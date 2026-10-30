@@ -106,7 +106,7 @@ def load_room_control_config(
         ]
         humidifier_command_state_file = environ.get(
             "HUMIDIFIER_COMMAND_STATE_FILE",
-            "/app/.state/humidifier-commands.json",
+            ".state/humidifier-commands.json",
         ).strip()
         humidifier_confirmation_deadline_seconds = float(
             environ.get("HUMIDIFIER_CONFIRMATION_DEADLINE_SECONDS", "600")
