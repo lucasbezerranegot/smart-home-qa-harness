@@ -373,13 +373,20 @@ ALLOW_REAL_HUMIDIFIER_COMMANDS=true \
   PYTHONPATH=src python scripts/run_room_control.py
 ```
 
-After a command, the controller reads the plug status again and reports
-`HUMIDIFIER_STATE_NOT_CONFIRMED` if the provider does not confirm the requested
-physical state. Because cloud providers can briefly return stale state, the
-controller retries confirmation after each delay configured in
+After a SwitchBot command, the controller reads the plug status again and
+reports `HUMIDIFIER_STATE_NOT_CONFIRMED` if the provider does not confirm the
+requested physical state. Because cloud providers can briefly return stale
+state, the controller retries confirmation after each delay configured in
 `HUMIDIFIER_CONFIRMATION_RETRY_DELAYS_SECONDS` (for example,
 `2,5,10,15`). It stops as soon as the desired state is confirmed; providers
 that cannot confirm physical state are not polled repeatedly.
+VeSync uses a different stability path: the command intent is durably reserved
+before actuation, an accepted command remains pending without being resent,
+and later five-minute cycles confirm it. `HUMIDIFIER_CONFIRMATION_DEADLINE_SECONDS`
+defaults to 600 seconds; only an unresolved command beyond that deadline is
+reported as `HUMIDIFIER_STATE_NOT_CONFIRMED`. Pending state is stored at
+`HUMIDIFIER_COMMAND_STATE_FILE` and contains logical room names, never VeSync
+credentials or device identifiers.
 The Plug Mini's instantaneous power is recorded for future calibration only.
 This version intentionally does not interpret low power as an empty water tank
 and does not send a water notification.
@@ -395,9 +402,10 @@ access. `VESYNC_TIMEOUT_SECONDS` bounds every cloud operation. All five
 `VESYNC_*` values come from runtime environment configuration; the adapter has
 no built-in region, timezone, timeout, username, or password fallback.
 
-The VeSync adapter reads the selected humidifier before a decision, sends only
-the allow-listed power operation when the desired state differs, and reads the
-device again through the common controller after a command. Authentication,
+The VeSync adapter reads each selected humidifier before a decision and sends
+only the allow-listed power operation when the desired state differs. All
+VeSync rooms in one execution share one authenticated session and one device
+inventory fetch; device updates and failures remain isolated by room. Authentication,
 timeout, rate-limit, malformed-response, missing-device, offline-device, and
 rejected-command failures are returned as structured error codes. Dry-run is
 still the default and never sends a power command.

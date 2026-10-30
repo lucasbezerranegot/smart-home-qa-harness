@@ -1,6 +1,7 @@
 """Operational wiring for room ventilation and humidifier control."""
 
 from collections.abc import Callable, Mapping
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
 import math
@@ -9,6 +10,9 @@ import uuid
 from smart_home_qa_harness.humidifier_control import (
     HumidifierControlResult,
     run_humidifier_control,
+)
+from smart_home_qa_harness.humidifier_command_state import (
+    FileHumidifierCommandStore,
 )
 from smart_home_qa_harness.humidifier_provider import (
     HumidifierProvider,
@@ -32,6 +36,7 @@ from smart_home_qa_harness.switchbot_humidifier_provider import (
     SwitchBotPlugHumidifierProvider,
 )
 from smart_home_qa_harness.vesync_humidifier_provider import (
+    VeSyncCycleSession,
     VeSyncHumidifierProvider,
 )
 from smart_home_qa_harness.weather_client import (
@@ -51,6 +56,8 @@ class RoomControlApplicationConfig:
     humidifier_on_below: float
     humidifier_off_at: float
     humidifier_confirmation_retry_delays_seconds: tuple[float, ...]
+    humidifier_command_state_file: str
+    humidifier_confirmation_deadline_seconds: float
     vesync_username: str | None
     vesync_password: str | None
     vesync_country_code: str | None
@@ -97,6 +104,13 @@ def load_room_control_config(
         confirmation_retry_delays_raw = environ[
             "HUMIDIFIER_CONFIRMATION_RETRY_DELAYS_SECONDS"
         ]
+        humidifier_command_state_file = environ.get(
+            "HUMIDIFIER_COMMAND_STATE_FILE",
+            "/app/.state/humidifier-commands.json",
+        ).strip()
+        humidifier_confirmation_deadline_seconds = float(
+            environ.get("HUMIDIFIER_CONFIRMATION_DEADLINE_SECONDS", "600")
+        )
         home = load_room_config(environ)
     except KeyError as error:
         raise RoomControlApplicationError(
@@ -117,6 +131,9 @@ def load_room_control_config(
         not token.strip()
         or not secret.strip()
         or not 0 <= humidifier_on_below < humidifier_off_at <= 100
+        or not humidifier_command_state_file
+        or not math.isfinite(humidifier_confirmation_deadline_seconds)
+        or humidifier_confirmation_deadline_seconds <= 0
     ):
         raise RoomControlApplicationError(
             "INVALID_ROOM_CONTROL_CONFIGURATION",
@@ -168,6 +185,10 @@ def load_room_control_config(
         humidifier_off_at=humidifier_off_at,
         humidifier_confirmation_retry_delays_seconds=(
             humidifier_confirmation_retry_delays_seconds
+        ),
+        humidifier_command_state_file=humidifier_command_state_file,
+        humidifier_confirmation_deadline_seconds=(
+            humidifier_confirmation_deadline_seconds
         ),
         vesync_username=vesync_username,
         vesync_password=vesync_password,
@@ -224,34 +245,49 @@ def run_room_control_cycle(
         weather_provider=weather_provider,
     )
 
-    humidifier_results = tuple(
-        run_humidifier_control(
-            room=room,
-            relative_humidity=(
-                readings[room.room_id].relative_humidity
-                if room.room_id in readings
-                else None
-            ),
-            current_time=local_time,
-            provider=(
-                humidifier_provider_factory(room)
-                if humidifier_provider_factory is not None
-                else _build_humidifier_provider(
-                    config=config,
-                    room=room,
-                    timestamp_ms=timestamp_ms,
-                    nonce_factory=nonce_factory,
-                )
-            ),
-            dry_run=not apply_humidifier_commands,
-            on_below=config.humidifier_on_below,
-            off_at=config.humidifier_off_at,
-            confirmation_retry_delays=(
-                config.humidifier_confirmation_retry_delays_seconds
-            ),
-        )
-        for room in config.home.humidifier_rooms
+    pending_store = FileHumidifierCommandStore(
+        config.humidifier_command_state_file
     )
+    session_context = (
+        _build_vesync_cycle_session(config)
+        if humidifier_provider_factory is None and _uses_vesync(config)
+        else nullcontext(None)
+    )
+    with session_context as vesync_cycle_session:
+        humidifier_results = tuple(
+            run_humidifier_control(
+                room=room,
+                relative_humidity=(
+                    readings[room.room_id].relative_humidity
+                    if room.room_id in readings
+                    else None
+                ),
+                current_time=local_time,
+                provider=(
+                    humidifier_provider_factory(room)
+                    if humidifier_provider_factory is not None
+                    else _build_humidifier_provider(
+                        config=config,
+                        room=room,
+                        timestamp_ms=timestamp_ms,
+                        nonce_factory=nonce_factory,
+                        vesync_cycle_session=vesync_cycle_session,
+                    )
+                ),
+                dry_run=not apply_humidifier_commands,
+                on_below=config.humidifier_on_below,
+                off_at=config.humidifier_off_at,
+                confirmation_retry_delays=(
+                    config.humidifier_confirmation_retry_delays_seconds
+                ),
+                pending_command_store=pending_store,
+                current_datetime=current_datetime,
+                confirmation_deadline_seconds=(
+                    config.humidifier_confirmation_deadline_seconds
+                ),
+            )
+            for room in config.home.humidifier_rooms
+        )
 
     return RoomControlCycleResult(
         ventilation=ventilation,
@@ -303,6 +339,7 @@ def _build_humidifier_provider(
     room: RoomConfig,
     timestamp_ms: int,
     nonce_factory: Callable[[], str],
+    vesync_cycle_session: VeSyncCycleSession | None = None,
 ) -> HumidifierProvider:
     if room.humidifier_provider is HumidifierProviderKind.SWITCHBOT_PLUG:
         return SwitchBotPlugHumidifierProvider(
@@ -325,8 +362,33 @@ def _build_humidifier_provider(
             country_code=config.vesync_country_code,
             time_zone=config.vesync_time_zone,
             timeout_seconds=config.vesync_timeout_seconds,
+            cycle_session=vesync_cycle_session,
         )
     raise AssertionError("Unsupported configured humidifier provider.")
+
+
+def _uses_vesync(config: RoomControlApplicationConfig) -> bool:
+    return any(
+        room.humidifier_provider is HumidifierProviderKind.VESYNC
+        for room in config.home.humidifier_rooms
+    )
+
+
+def _build_vesync_cycle_session(
+    config: RoomControlApplicationConfig,
+) -> VeSyncCycleSession:
+    assert config.vesync_username is not None
+    assert config.vesync_password is not None
+    assert config.vesync_country_code is not None
+    assert config.vesync_time_zone is not None
+    assert config.vesync_timeout_seconds is not None
+    return VeSyncCycleSession(
+        username=config.vesync_username,
+        password=config.vesync_password,
+        country_code=config.vesync_country_code,
+        time_zone=config.vesync_time_zone,
+        timeout_seconds=config.vesync_timeout_seconds,
+    )
 
 
 def _optional_value(

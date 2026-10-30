@@ -144,7 +144,13 @@ def main(environ=None, now_factory=None) -> int:
             decision=_enum_value(item.desired_state, "unavailable"),
             command_status=_humidifier_command_status(item),
             confirmation_status=(
-                "confirmed" if item.state_confirmed else "unconfirmed"
+                "confirmed"
+                if item.state_confirmed
+                else (
+                    "pending"
+                    if getattr(item, "confirmation_pending", False)
+                    else "unconfirmed"
+                )
             ),
             error_code=item.error_code,
             alert_tracker=alert_tracker,
@@ -155,6 +161,9 @@ def main(environ=None, now_factory=None) -> int:
                 "previous": _enum_value(item.previous_state),
                 "reported": _enum_value(item.reported_state),
                 "dry_run": item.dry_run,
+                "confirmation_pending": getattr(
+                    item, "confirmation_pending", False
+                ),
             },
         ), notifier)
 
