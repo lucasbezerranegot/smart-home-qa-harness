@@ -21,6 +21,7 @@ This catalog is the versioned index of product and quality requirements. The lin
 | `REQ-OBS-001` | Provide structured operational logging and monitoring | Operations | Versioned redacted events, persistent repeated-failure state and recovery signaling (`ee23508`) | [#36](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/36) |
 | `REQ-STATE-001` | Improve state retention and concurrent access safety | State | Local locks, durable atomic writes, retention and multi-process tests (`2e3797f`) | [#35](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/35) |
 | `REQ-HUM-002` | Control living-room Philips humidifiers through SwitchBot plugs | Humidifier | Plug adapter and controller tests; real-device power-restoration and confirmed command evidence | [#25](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/25) |
+| `REQ-HUM-007` | Confirm non-API humidifier operation through smart-plug power measurements | Humidifier | Per-room electrical calibration, OFF/RUNNING/AMBIGUOUS classification, mismatch reporting without blind relay repeats, and supervised 7.5 W low-mist evidence | [#48](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/48) |
 | `REQ-HUM-009` | Stabilize VeSync command confirmation and cycle-level device access | Humidifier | Durable deferred command confirmation, at-most-once actuation and one shared VeSync session/inventory per cycle | [#54](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/54) |
 
 ## Delivered through pull request #37
@@ -59,7 +60,6 @@ These requirements describe the current uncommitted branch work observed on 2026
 | `REQ-HEAT-010` | Integrate installed SwitchBot radiator thermostats | Heating | README roadmap | [#31](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/31) |
 | `REQ-HEAT-011` | Run guarded scheduled heating control across multiple zones | Heating | Multi-zone rollout | [#46](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/46) |
 | `REQ-HUM-003` | Detect probable low water from calibrated humidifier power | Humidifier | Branch roadmap | [#32](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/32) |
-| `REQ-HUM-007` | Confirm non-API humidifier operation through smart-plug power measurements | Humidifier | Living-room smart-plug installation and calibration prerequisite for low-water inference | [#48](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/48) |
 | `REQ-HUM-004` | Control the children-room Levoit humidifier through VeSync | Humidifier | Product requirement | [#41](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/41) |
 | `REQ-HUM-006` | Provide a common control interface for humidifier providers | Humidifier | Architecture requirement | [#43](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/43) |
 | `REQ-HUM-008` | Control the bedroom Levoit 300S through the shared VeSync integration | Humidifier | Superseding product decision | [#42](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/42) |

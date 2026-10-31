@@ -15,6 +15,7 @@ from smart_home_qa_harness.humidifier_command_state import (
     PendingHumidifierCommand,
 )
 from smart_home_qa_harness.humidifier_provider import (
+    HumidifierOperationState,
     HumidifierProvider,
     HumidifierProviderError,
     HumidifierProviderStatus,
@@ -38,6 +39,10 @@ class HumidifierControlResult:
     state_confirmed: bool
     confirmation_pending: bool = False
     error_code: str | None = None
+    power_watts: float | None = None
+    operation_state: HumidifierOperationState | None = None
+    operation_confirmed: bool = False
+    operation_confirmation_supported: bool = False
 
 
 def run_humidifier_control(
@@ -167,6 +172,10 @@ def run_humidifier_control(
                 )
 
     if desired_state is current_status.reported_state:
+        state_confirmed = _matches_desired_state(
+            current_status,
+            desired_state,
+        )
         return _result(
             room=room,
             provider=provider,
@@ -177,7 +186,9 @@ def run_humidifier_control(
             command_attempted=False,
             command_succeeded=False,
             dry_run=dry_run,
-            state_confirmed=current_status.state_confirmed,
+            state_confirmed=state_confirmed,
+            error_code=_confirmation_error(current_status, desired_state),
+            provider_status=current_status,
         )
 
     if dry_run:
@@ -192,6 +203,7 @@ def run_humidifier_control(
             command_succeeded=False,
             dry_run=True,
             state_confirmed=False,
+            provider_status=current_status,
         )
 
     uses_deferred_confirmation = (
@@ -282,8 +294,7 @@ def run_humidifier_control(
         )
 
     state_confirmed = (
-        confirmed_status.state_confirmed
-        and confirmed_status.reported_state is desired_state
+        _matches_desired_state(confirmed_status, desired_state)
     )
     return _result(
         room=room,
@@ -296,11 +307,8 @@ def run_humidifier_control(
         command_succeeded=True,
         dry_run=False,
         state_confirmed=state_confirmed,
-        error_code=(
-            None
-            if state_confirmed or not confirmed_status.confirmation_supported
-            else "HUMIDIFIER_STATE_NOT_CONFIRMED"
-        ),
+        error_code=_confirmation_error(confirmed_status, desired_state),
+        provider_status=confirmed_status,
     )
 
 
@@ -328,7 +336,39 @@ def _matches_desired_state(
     status: HumidifierProviderStatus,
     desired_state: HumidifierState,
 ) -> bool:
-    return status.state_confirmed and status.reported_state is desired_state
+    if not (
+        status.state_confirmed
+        and status.reported_state is desired_state
+    ):
+        return False
+    if not status.operation_confirmation_supported:
+        return True
+    expected_operation = (
+        HumidifierOperationState.RUNNING
+        if desired_state is HumidifierState.ON
+        else HumidifierOperationState.OFF
+    )
+    return (
+        status.operation_confirmed
+        and status.operation_state is expected_operation
+    )
+
+
+def _confirmation_error(
+    status: HumidifierProviderStatus,
+    desired_state: HumidifierState,
+) -> str | None:
+    if _matches_desired_state(status, desired_state):
+        return None
+    if (
+        status.state_confirmed
+        and status.reported_state is desired_state
+        and status.operation_confirmation_supported
+    ):
+        return "HUMIDIFIER_OPERATION_NOT_CONFIRMED"
+    if status.confirmation_supported:
+        return "HUMIDIFIER_STATE_NOT_CONFIRMED"
+    return None
 
 
 def _validated_retry_delays(
@@ -364,6 +404,7 @@ def _result(
     state_confirmed: bool,
     confirmation_pending: bool = False,
     error_code: str | None = None,
+    provider_status: HumidifierProviderStatus | None = None,
 ) -> HumidifierControlResult:
     return HumidifierControlResult(
         room_id=room.room_id,
@@ -379,6 +420,26 @@ def _result(
         state_confirmed=state_confirmed,
         confirmation_pending=confirmation_pending,
         error_code=error_code,
+        power_watts=(
+            provider_status.power_watts
+            if provider_status is not None
+            else None
+        ),
+        operation_state=(
+            provider_status.operation_state
+            if provider_status is not None
+            else None
+        ),
+        operation_confirmed=(
+            provider_status.operation_confirmed
+            if provider_status is not None
+            else False
+        ),
+        operation_confirmation_supported=(
+            provider_status.operation_confirmation_supported
+            if provider_status is not None
+            else False
+        ),
     )
 
 

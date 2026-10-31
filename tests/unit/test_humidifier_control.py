@@ -5,6 +5,7 @@ import pytest
 
 from smart_home_qa_harness.humidifier_control import run_humidifier_control
 from smart_home_qa_harness.humidifier_provider import (
+    HumidifierOperationState,
     HumidifierProviderError,
     HumidifierProviderStatus,
     HumidifierState,
@@ -25,7 +26,15 @@ ROOM = RoomConfig(
 )
 
 
-def status(state, confirmed=True, power=0, confirmation_supported=True):
+def status(
+    state,
+    confirmed=True,
+    power=0,
+    confirmation_supported=True,
+    operation_state=None,
+    operation_confirmed=False,
+    operation_confirmation_supported=False,
+):
     return HumidifierProviderStatus(
         provider_name="fake-provider",
         device_id="humidifier-bedroom",
@@ -33,6 +42,9 @@ def status(state, confirmed=True, power=0, confirmation_supported=True):
         state_confirmed=confirmed,
         confirmation_supported=confirmation_supported,
         power_watts=power,
+        operation_state=operation_state,
+        operation_confirmed=operation_confirmed,
+        operation_confirmation_supported=operation_confirmation_supported,
     )
 
 
@@ -204,6 +216,84 @@ def test_preserves_unconfirmed_state_without_claiming_physical_confirmation():
     assert result.command_attempted is False
     assert result.reported_state is HumidifierState.ON
     assert result.state_confirmed is False
+
+
+def test_reports_running_mismatch_without_repeating_relay_command():
+    target = provider(
+        status(
+            HumidifierState.ON,
+            power=0,
+            operation_state=HumidifierOperationState.OFF,
+            operation_confirmed=True,
+            operation_confirmation_supported=True,
+        )
+    )
+
+    result = run_humidifier(target, humidity=40)
+
+    assert result.command_attempted is False
+    assert result.reported_state is HumidifierState.ON
+    assert result.operation_state is HumidifierOperationState.OFF
+    assert result.operation_confirmed is True
+    assert result.state_confirmed is False
+    assert result.error_code == "HUMIDIFIER_OPERATION_NOT_CONFIRMED"
+    target.set_state.assert_not_called()
+
+
+def test_retries_electrical_observation_until_running_is_confirmed():
+    target = provider(
+        status(HumidifierState.OFF),
+        status(
+            HumidifierState.ON,
+            power=2,
+            operation_state=HumidifierOperationState.AMBIGUOUS,
+            operation_confirmation_supported=True,
+        ),
+        status(
+            HumidifierState.ON,
+            power=7.2,
+            operation_state=HumidifierOperationState.RUNNING,
+            operation_confirmed=True,
+            operation_confirmation_supported=True,
+        ),
+    )
+    wait = Mock()
+
+    result = run_humidifier(
+        target,
+        humidity=40,
+        confirmation_retry_delays=(2, 5),
+        wait=wait,
+    )
+
+    assert result.command_succeeded is True
+    assert result.state_confirmed is True
+    assert result.operation_state is HumidifierOperationState.RUNNING
+    assert result.power_watts == 7.2
+    assert result.error_code is None
+    assert wait.call_args_list == [call(2.0)]
+
+
+def test_reports_ambiguous_power_after_confirmation_retries():
+    ambiguous = status(
+        HumidifierState.ON,
+        power=2,
+        operation_state=HumidifierOperationState.AMBIGUOUS,
+        operation_confirmation_supported=True,
+    )
+    target = provider(status(HumidifierState.OFF), ambiguous, ambiguous)
+
+    result = run_humidifier(
+        target,
+        humidity=40,
+        confirmation_retry_delays=(2,),
+        wait=Mock(),
+    )
+
+    assert result.command_succeeded is True
+    assert result.state_confirmed is False
+    assert result.operation_state is HumidifierOperationState.AMBIGUOUS
+    assert result.error_code == "HUMIDIFIER_OPERATION_NOT_CONFIRMED"
 
 
 def test_unknown_state_uses_safe_off_as_hysteresis_baseline():

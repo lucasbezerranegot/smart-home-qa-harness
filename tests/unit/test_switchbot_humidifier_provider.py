@@ -3,6 +3,8 @@ from unittest.mock import Mock, patch
 import pytest
 
 from smart_home_qa_harness.humidifier_provider import (
+    HumidifierOperationState,
+    HumidifierPowerCalibration,
     HumidifierProviderError,
     HumidifierState,
 )
@@ -16,13 +18,14 @@ from smart_home_qa_harness.switchbot_plug_client import (
 )
 
 
-def provider():
+def provider(power_calibration=None):
     return SwitchBotPlugHumidifierProvider(
         token="secret-token",
         secret="secret-key",
         plug_device_id="plug-children",
         timestamp_ms=1724000000000,
         nonce_factory=Mock(return_value="nonce"),
+        power_calibration=power_calibration,
     )
 
 
@@ -82,3 +85,57 @@ def test_rejects_non_common_state_before_switchbot_call():
         provider().set_state("ON")
 
     assert captured.value.code == "INVALID_HUMIDIFIER_STATE"
+
+
+@pytest.mark.parametrize(
+    "relay_state,power,expected_state,confirmed",
+    [
+        (PlugState.OFF, 0.0, HumidifierOperationState.OFF, True),
+        (PlugState.ON, 0.4, HumidifierOperationState.OFF, True),
+        (PlugState.ON, 5.0, HumidifierOperationState.RUNNING, True),
+        (PlugState.ON, 15.0, HumidifierOperationState.RUNNING, True),
+        (PlugState.ON, 2.0, HumidifierOperationState.AMBIGUOUS, False),
+        (PlugState.ON, 20.0, HumidifierOperationState.AMBIGUOUS, False),
+    ],
+)
+@patch("smart_home_qa_harness.switchbot_humidifier_provider.get_plug_status")
+def test_classifies_electrically_observed_operation(
+    get_status,
+    relay_state,
+    power,
+    expected_state,
+    confirmed,
+):
+    get_status.return_value = PlugMiniStatus(
+        "plug-children",
+        relay_state,
+        230,
+        power,
+        90,
+        120,
+    )
+    target = provider(HumidifierPowerCalibration(0.5, 5.0, 15.0))
+
+    result = target.read_status()
+
+    assert result.operation_confirmation_supported is True
+    assert result.operation_state is expected_state
+    assert result.operation_confirmed is confirmed
+
+
+@patch("smart_home_qa_harness.switchbot_humidifier_provider.get_plug_status")
+def test_leaves_operation_confirmation_disabled_without_calibration(get_status):
+    get_status.return_value = PlugMiniStatus(
+        "plug-children",
+        PlugState.ON,
+        230,
+        7.2,
+        90,
+        120,
+    )
+
+    result = provider().read_status()
+
+    assert result.operation_confirmation_supported is False
+    assert result.operation_state is None
+    assert result.operation_confirmed is False

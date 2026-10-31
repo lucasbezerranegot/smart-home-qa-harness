@@ -156,6 +156,7 @@ def main(environ=None, now_factory=None) -> int:
             alert_tracker=alert_tracker,
             measurements={
                 "relative_humidity_percent": item.relative_humidity,
+                "power_watts": getattr(item, "power_watts", None),
             },
             state={
                 "previous": _enum_value(item.previous_state),
@@ -163,6 +164,17 @@ def main(environ=None, now_factory=None) -> int:
                 "dry_run": item.dry_run,
                 "confirmation_pending": getattr(
                     item, "confirmation_pending", False
+                ),
+                "operation": _enum_value(
+                    getattr(item, "operation_state", None)
+                ),
+                "operation_confirmed": getattr(
+                    item, "operation_confirmed", False
+                ),
+                "operation_confirmation_supported": getattr(
+                    item,
+                    "operation_confirmation_supported",
+                    False,
                 ),
             },
         ), notifier)

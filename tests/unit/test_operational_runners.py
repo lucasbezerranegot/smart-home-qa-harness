@@ -94,6 +94,10 @@ def test_room_runner_emits_redacted_events_for_each_subsystem(
                 command_succeeded=True,
                 dry_run=False,
                 state_confirmed=True,
+                power_watts=7.2,
+                operation_state=SimpleNamespace(value="RUNNING"),
+                operation_confirmed=True,
+                operation_confirmation_supported=True,
                 error_code=None,
             ),
         ),
@@ -114,6 +118,9 @@ def test_room_runner_emits_redacted_events_for_each_subsystem(
     ]
     assert all(event["schema_version"] == 1 for event in events)
     assert events[-2]["command_status"] == "succeeded"
+    assert events[-2]["measurements"]["power_watts"] == 7.2
+    assert events[-2]["state"]["operation"] == "RUNNING"
+    assert events[-2]["state"]["operation_confirmed"] is True
     assert events[-1]["decision"] == "completed_with_errors"
     assert "sensitive-device-id" not in output
     assert "device_id" not in output
