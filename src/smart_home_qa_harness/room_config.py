@@ -3,6 +3,11 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
+import math
+
+from smart_home_qa_harness.humidifier_provider import (
+    HumidifierPowerCalibration,
+)
 
 
 class RoomConfigurationError(ValueError):
@@ -30,6 +35,7 @@ class RoomConfig:
     has_window: bool
     humidifier_provider: HumidifierProviderKind | None = None
     humidifier_device_id: str | None = None
+    humidifier_power_calibration: HumidifierPowerCalibration | None = None
 
     def __post_init__(self) -> None:
         for field_name, value in (
@@ -71,6 +77,17 @@ class RoomConfig:
             raise RoomConfigurationError(
                 "INVALID_ROOM_CONFIGURATION",
                 "humidifier_device_id must be null or a non-empty string.",
+            )
+        if self.humidifier_power_calibration is not None and (
+            self.humidifier_provider is not HumidifierProviderKind.SWITCHBOT_PLUG
+            or not isinstance(
+                self.humidifier_power_calibration,
+                HumidifierPowerCalibration,
+            )
+        ):
+            raise RoomConfigurationError(
+                "INVALID_ROOM_CONFIGURATION",
+                "Power calibration requires a SwitchBot plug humidifier.",
             )
 
 
@@ -200,9 +217,11 @@ def _load_humidifier_binding(
         raw_device_id = legacy_plug_id
 
     if not raw_provider and not raw_device_id:
+        _reject_power_calibration_without_binding(environ, prefix)
         return {
             "humidifier_provider": None,
             "humidifier_device_id": None,
+            "humidifier_power_calibration": None,
         }
     try:
         provider = HumidifierProviderKind(raw_provider)
@@ -214,7 +233,71 @@ def _load_humidifier_binding(
     return {
         "humidifier_provider": provider,
         "humidifier_device_id": raw_device_id or None,
+        "humidifier_power_calibration": _load_power_calibration(
+            environ,
+            prefix,
+            provider,
+        ),
     }
+
+
+def _load_power_calibration(
+    environ: Mapping[str, str],
+    prefix: str,
+    provider: HumidifierProviderKind,
+) -> HumidifierPowerCalibration | None:
+    keys = (
+        f"{prefix}_HUMIDIFIER_POWER_OFF_MAX_WATTS",
+        f"{prefix}_HUMIDIFIER_POWER_RUNNING_MIN_WATTS",
+        f"{prefix}_HUMIDIFIER_POWER_RUNNING_MAX_WATTS",
+    )
+    raw_values = tuple(environ.get(key, "").strip() for key in keys)
+    if not any(raw_values):
+        return None
+    if provider is not HumidifierProviderKind.SWITCHBOT_PLUG or not all(
+        raw_values
+    ):
+        raise RoomConfigurationError(
+            "INVALID_HUMIDIFIER_POWER_CALIBRATION",
+            "All power calibration values require a SwitchBot plug humidifier.",
+        )
+    try:
+        values = tuple(float(value) for value in raw_values)
+    except ValueError as error:
+        raise RoomConfigurationError(
+            "INVALID_HUMIDIFIER_POWER_CALIBRATION",
+            "Power calibration values must be numbers.",
+        ) from error
+    if any(not math.isfinite(value) for value in values):
+        raise RoomConfigurationError(
+            "INVALID_HUMIDIFIER_POWER_CALIBRATION",
+            "Power calibration values must be finite.",
+        )
+    try:
+        return HumidifierPowerCalibration(*values)
+    except ValueError as error:
+        raise RoomConfigurationError(
+            "INVALID_HUMIDIFIER_POWER_CALIBRATION",
+            str(error),
+        ) from error
+
+
+def _reject_power_calibration_without_binding(
+    environ: Mapping[str, str],
+    prefix: str,
+) -> None:
+    if any(
+        environ.get(key, "").strip()
+        for key in (
+            f"{prefix}_HUMIDIFIER_POWER_OFF_MAX_WATTS",
+            f"{prefix}_HUMIDIFIER_POWER_RUNNING_MIN_WATTS",
+            f"{prefix}_HUMIDIFIER_POWER_RUNNING_MAX_WATTS",
+        )
+    ):
+        raise RoomConfigurationError(
+            "INVALID_HUMIDIFIER_POWER_CALIBRATION",
+            "Power calibration requires a configured humidifier.",
+        )
 
 
 def _reject_duplicates(label: str, values: list[str]) -> None:

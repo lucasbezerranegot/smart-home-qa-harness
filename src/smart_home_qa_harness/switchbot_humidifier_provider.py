@@ -4,6 +4,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from smart_home_qa_harness.humidifier_provider import (
+    HumidifierOperationState,
+    HumidifierPowerCalibration,
     HumidifierProviderError,
     HumidifierProviderStatus,
     HumidifierState,
@@ -26,6 +28,7 @@ class SwitchBotPlugHumidifierProvider:
     plug_device_id: str
     timestamp_ms: int
     nonce_factory: Callable[[], str]
+    power_calibration: HumidifierPowerCalibration | None = None
 
     @property
     def provider_name(self) -> str:
@@ -47,6 +50,11 @@ class SwitchBotPlugHumidifierProvider:
         except (SwitchBotPlugError, IndoorEnvironmentError) as error:
             raise _translate_error(error) from error
 
+        operation_state, operation_confirmed = _classify_operation(
+            status.state,
+            status.power,
+            self.power_calibration,
+        )
         return HumidifierProviderStatus(
             provider_name=self.provider_name,
             device_id=status.device_id,
@@ -58,6 +66,11 @@ class SwitchBotPlugHumidifierProvider:
             state_confirmed=True,
             confirmation_supported=True,
             power_watts=status.power,
+            operation_state=operation_state,
+            operation_confirmed=operation_confirmed,
+            operation_confirmation_supported=(
+                self.power_calibration is not None
+            ),
         )
 
     def set_state(self, state: HumidifierState) -> None:
@@ -93,3 +106,22 @@ def _translate_error(
         message=error.message,
         retryable=error.retryable,
     )
+
+
+def _classify_operation(
+    relay_state: PlugState,
+    power_watts: float,
+    calibration: HumidifierPowerCalibration | None,
+) -> tuple[HumidifierOperationState | None, bool]:
+    if calibration is None:
+        return None, False
+    if power_watts <= calibration.off_max_watts:
+        return HumidifierOperationState.OFF, True
+    if (
+        relay_state is PlugState.ON
+        and calibration.running_min_watts
+        <= power_watts
+        <= calibration.running_max_watts
+    ):
+        return HumidifierOperationState.RUNNING, True
+    return HumidifierOperationState.AMBIGUOUS, False

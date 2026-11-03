@@ -348,6 +348,7 @@ def _build_humidifier_provider(
             plug_device_id=room.humidifier_device_id,
             timestamp_ms=timestamp_ms,
             nonce_factory=nonce_factory,
+            power_calibration=room.humidifier_power_calibration,
         )
     if room.humidifier_provider is HumidifierProviderKind.VESYNC:
         assert config.vesync_username is not None

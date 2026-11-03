@@ -72,6 +72,27 @@ def test_loads_generic_humidifier_provider_binding():
     assert result.rooms[0].humidifier_device_id == "levoit-children"
 
 
+def test_loads_switchbot_humidifier_power_calibration():
+    environ = {
+        "ROOM_COUNT": "1",
+        "ROOM_1_ID": "living-room",
+        "ROOM_1_DISPLAY_NAME": "sala",
+        "ROOM_1_METER_ID": "meter-living",
+        "ROOM_1_HAS_WINDOW": "true",
+        "ROOM_1_HUMIDIFIER_PROVIDER": "switchbot-plug",
+        "ROOM_1_HUMIDIFIER_DEVICE_ID": "plug-living",
+        "ROOM_1_HUMIDIFIER_POWER_OFF_MAX_WATTS": "0.5",
+        "ROOM_1_HUMIDIFIER_POWER_RUNNING_MIN_WATTS": "5.0",
+        "ROOM_1_HUMIDIFIER_POWER_RUNNING_MAX_WATTS": "15.0",
+    }
+
+    room_config = load_room_config(environ).rooms[0]
+
+    assert room_config.humidifier_power_calibration.off_max_watts == 0.5
+    assert room_config.humidifier_power_calibration.running_min_watts == 5.0
+    assert room_config.humidifier_power_calibration.running_max_watts == 15.0
+
+
 def test_allows_distinct_vesync_humidifiers_in_multiple_rooms():
     environ = {
         "ROOM_COUNT": "2",
@@ -199,3 +220,39 @@ def test_rejects_invalid_environment_configuration(environ, code):
         load_room_config(environ)
 
     assert captured.value.code == code
+
+
+@pytest.mark.parametrize(
+    "calibration",
+    [
+        {
+            "ROOM_1_HUMIDIFIER_POWER_OFF_MAX_WATTS": "0.5",
+        },
+        {
+            "ROOM_1_HUMIDIFIER_POWER_OFF_MAX_WATTS": "0.5",
+            "ROOM_1_HUMIDIFIER_POWER_RUNNING_MIN_WATTS": "bad",
+            "ROOM_1_HUMIDIFIER_POWER_RUNNING_MAX_WATTS": "15",
+        },
+        {
+            "ROOM_1_HUMIDIFIER_POWER_OFF_MAX_WATTS": "5",
+            "ROOM_1_HUMIDIFIER_POWER_RUNNING_MIN_WATTS": "5",
+            "ROOM_1_HUMIDIFIER_POWER_RUNNING_MAX_WATTS": "15",
+        },
+    ],
+)
+def test_rejects_invalid_switchbot_power_calibration(calibration):
+    environ = {
+        "ROOM_COUNT": "1",
+        "ROOM_1_ID": "living-room",
+        "ROOM_1_DISPLAY_NAME": "sala",
+        "ROOM_1_METER_ID": "meter-living",
+        "ROOM_1_HAS_WINDOW": "true",
+        "ROOM_1_HUMIDIFIER_PROVIDER": "switchbot-plug",
+        "ROOM_1_HUMIDIFIER_DEVICE_ID": "plug-living",
+        **calibration,
+    }
+
+    with pytest.raises(RoomConfigurationError) as captured:
+        load_room_config(environ)
+
+    assert captured.value.code == "INVALID_HUMIDIFIER_POWER_CALIBRATION"

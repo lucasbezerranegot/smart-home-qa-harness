@@ -1,6 +1,8 @@
 import pytest
 
 from smart_home_qa_harness.humidifier_provider import (
+    HumidifierOperationState,
+    HumidifierPowerCalibration,
     HumidifierProviderStatus,
     HumidifierState,
 )
@@ -51,3 +53,34 @@ def test_accepts_unknown_unconfirmed_state_for_non_observable_provider():
 def test_rejects_malformed_common_status(arguments):
     with pytest.raises(ValueError):
         HumidifierProviderStatus(*arguments)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        (-0.1, 5, 15),
+        (5, 5, 15),
+        (0.5, 15, 5),
+        (0.5, float("nan"), 15),
+        (False, 5, 15),
+    ],
+)
+def test_rejects_invalid_power_calibration(values):
+    with pytest.raises(ValueError):
+        HumidifierPowerCalibration(*values)
+
+
+def test_accepts_confirmed_electrical_operation():
+    result = HumidifierProviderStatus(
+        "switchbot-plug",
+        "plug",
+        HumidifierState.ON,
+        True,
+        power_watts=7.2,
+        operation_state=HumidifierOperationState.RUNNING,
+        operation_confirmed=True,
+        operation_confirmation_supported=True,
+    )
+
+    assert result.operation_state is HumidifierOperationState.RUNNING
+    assert result.operation_confirmed is True

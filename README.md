@@ -387,9 +387,19 @@ defaults to 600 seconds; only an unresolved command beyond that deadline is
 reported as `HUMIDIFIER_STATE_NOT_CONFIRMED`. Pending state is stored at
 `HUMIDIFIER_COMMAND_STATE_FILE` and contains logical room names, never VeSync
 credentials or device identifiers.
-The Plug Mini's instantaneous power is recorded for future calibration only.
-This version intentionally does not interpret low power as an empty water tank
-and does not send a water notification.
+The Plug Mini's instantaneous power can independently confirm whether a
+non-API humidifier is electrically off or running. Confirmation remains
+disabled until all three room-specific calibration values are configured:
+`ROOM_N_HUMIDIFIER_POWER_OFF_MAX_WATTS`,
+`ROOM_N_HUMIDIFIER_POWER_RUNNING_MIN_WATTS`, and
+`ROOM_N_HUMIDIFIER_POWER_RUNNING_MAX_WATTS`. Values between the OFF and
+running ranges, or above the running range, remain ambiguous. A relay that is
+already in the desired state is never toggled again merely because electrical
+operation is unconfirmed; the cycle instead reports
+`HUMIDIFIER_OPERATION_NOT_CONFIRMED`. Power, classification, and confirmation
+are emitted in structured redacted events. Low-water inference remains a
+separate calibrated requirement and this version does not send a water
+notification.
 
 For each Levoit humidifier registered in VeSync, configure
 `ROOM_N_HUMIDIFIER_PROVIDER=vesync` and use that device's distinct VeSync CID

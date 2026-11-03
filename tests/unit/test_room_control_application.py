@@ -113,6 +113,35 @@ def test_one_cycle_reuses_room_registry_for_ventilation_and_humidifier():
     target.set_state.assert_not_called()
 
 
+@patch(
+    "smart_home_qa_harness.room_control_application."
+    "SwitchBotPlugHumidifierProvider"
+)
+def test_passes_room_power_calibration_to_switchbot_provider(plug_provider):
+    environ = {
+        **ENVIRON,
+        "ROOM_1_HUMIDIFIER_POWER_OFF_MAX_WATTS": "0.5",
+        "ROOM_1_HUMIDIFIER_POWER_RUNNING_MIN_WATTS": "5",
+        "ROOM_1_HUMIDIFIER_POWER_RUNNING_MAX_WATTS": "15",
+    }
+    target = fake_provider()
+    plug_provider.return_value = target
+
+    run_room_control_cycle(
+        config=load_room_control_config(environ),
+        current_datetime=datetime(
+            2026, 9, 26, 20, 0, tzinfo=ZoneInfo("Europe/Berlin")
+        ),
+        meter_reader=meter_reader,
+        weather_provider=Mock(return_value=WeatherData(18, "now", 27)),
+    )
+
+    calibration = plug_provider.call_args.kwargs["power_calibration"]
+    assert calibration.off_max_watts == 0.5
+    assert calibration.running_min_watts == 5
+    assert calibration.running_max_watts == 15
+
+
 def test_missing_meter_is_reported_and_humidifier_fails_safe_to_off():
     config = load_room_control_config(ENVIRON)
 

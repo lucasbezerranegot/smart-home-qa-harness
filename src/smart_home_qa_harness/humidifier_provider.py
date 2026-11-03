@@ -2,12 +2,50 @@
 
 from dataclasses import dataclass
 from enum import Enum
+import math
 from typing import Protocol, runtime_checkable
 
 
 class HumidifierState(Enum):
     OFF = "OFF"
     ON = "ON"
+
+
+class HumidifierOperationState(Enum):
+    OFF = "OFF"
+    RUNNING = "RUNNING"
+    AMBIGUOUS = "AMBIGUOUS"
+
+
+@dataclass(frozen=True)
+class HumidifierPowerCalibration:
+    """Electrical ranges used to confirm non-API humidifier operation."""
+
+    off_max_watts: float
+    running_min_watts: float
+    running_max_watts: float
+
+    def __post_init__(self) -> None:
+        values = (
+            self.off_max_watts,
+            self.running_min_watts,
+            self.running_max_watts,
+        )
+        if any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            for value in values
+        ):
+            raise ValueError("Power calibration values must be finite numbers.")
+        if not (
+            0 <= self.off_max_watts
+            < self.running_min_watts
+            <= self.running_max_watts
+        ):
+            raise ValueError(
+                "Power calibration ranges must be ordered and non-overlapping."
+            )
 
 
 @dataclass(frozen=True)
@@ -20,6 +58,9 @@ class HumidifierProviderStatus:
     state_confirmed: bool
     confirmation_supported: bool = True
     power_watts: float | None = None
+    operation_state: HumidifierOperationState | None = None
+    operation_confirmed: bool = False
+    operation_confirmation_supported: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.provider_name, str) or not self.provider_name.strip():
@@ -39,6 +80,30 @@ class HumidifierProviderStatus:
             raise ValueError("An unsupported confirmation cannot be confirmed.")
         if self.state_confirmed and self.reported_state is None:
             raise ValueError("A confirmed status requires a reported state.")
+        if self.operation_state is not None and not isinstance(
+            self.operation_state,
+            HumidifierOperationState,
+        ):
+            raise ValueError(
+                "operation_state must be a HumidifierOperationState or None."
+            )
+        if not isinstance(self.operation_confirmed, bool):
+            raise ValueError("operation_confirmed must be a boolean.")
+        if not isinstance(self.operation_confirmation_supported, bool):
+            raise ValueError(
+                "operation_confirmation_supported must be a boolean."
+            )
+        if self.operation_confirmed and not self.operation_confirmation_supported:
+            raise ValueError(
+                "Unsupported operation confirmation cannot be confirmed."
+            )
+        if self.operation_confirmed and self.operation_state in {
+            None,
+            HumidifierOperationState.AMBIGUOUS,
+        }:
+            raise ValueError(
+                "Confirmed operation requires an unambiguous operation state."
+            )
 
 
 class HumidifierProviderError(Exception):
