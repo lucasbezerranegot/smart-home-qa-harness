@@ -1,0 +1,17 @@
+[Unit]
+Description=Renew the ntfy Raspberry Pi dead-man switch
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/smart-home-qa-harness
+TimeoutStartSec=1min
+
+# Adjust the repository path and UID:GID to match your host before installing.
+ExecStart=/usr/bin/docker run --rm \
+    --user 1000:1000 \
+    --env-file %h/projects/smart-home-qa-harness/.env \
+    --volume %h/projects/smart-home-qa-harness/.state:/app/.state \
+    smart-home-qa-harness:runtime \
+    python scripts/run_ntfy_heartbeat.py renew

@@ -288,6 +288,63 @@ smart-home-room-control.timer`.
 
 Linger keeps the user manager available after logout and at boot; it does not prevent PC suspension. A successful oneshot service returns to `inactive (dead)`, while the timer stays `active (waiting)`. Ensure Docker starts at boot. To stop scheduling: `systemctl --user disable --now smart-home-qa.timer`.
 
+### Ntfy Raspberry Pi heartbeat
+
+The heartbeat is a dead-man switch backed by ntfy scheduled delivery. Every
+five minutes, `smart-home-ntfy-heartbeat.timer` replaces one notification with
+the stable sequence ID `smart-home-pi-heartbeat` and postpones its delivery by
+15 minutes. If the Pi, Docker, timer, network, or ntfy publishing path stops
+working, no further replacement arrives and ntfy sends the pending alert. The
+alert therefore does not depend on code continuing to run on the Pi.
+
+Enable the feature only after the existing ntfy connection has been validated:
+
+```dotenv
+NTFY_ENABLED=true
+NTFY_HEARTBEAT_ENABLED=true
+NTFY_HEARTBEAT_DELAY_SECONDS=900
+NTFY_HEARTBEAT_STATE_FILE=/app/.state/ntfy-heartbeat.json
+# Optional until the dashboard is deployed:
+DASHBOARD_URL=http://smart-home.local/
+```
+
+`DASHBOARD_URL` accepts an HTTP or HTTPS URL and becomes the notification's
+tap target. The ntfy topic and token remain secret in `.env`; heartbeat state
+contains only timestamps and maintenance flags.
+
+Install and inspect the dedicated user timer:
+
+```bash
+cp deploy/systemd/smart-home-ntfy-heartbeat.{service,timer} \
+  ~/.config/systemd/user/
+systemd-analyze --user verify \
+  ~/.config/systemd/user/smart-home-ntfy-heartbeat.{service,timer}
+systemctl --user daemon-reload
+systemctl --user enable --now smart-home-ntfy-heartbeat.timer
+systemctl --user start smart-home-ntfy-heartbeat.service
+journalctl --user -u smart-home-ntfy-heartbeat.service -n 20 --no-pager
+```
+
+For planned maintenance, run the container with the same protected environment
+and state mount, changing the final action to `pause`. This cancels the pending
+ntfy alert; normal timer invocations then remain paused. Use `resume` to renew
+the alert and leave maintenance mode:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" --env-file .env \
+  -v "$PWD/.state:/app/.state" smart-home-qa-harness:runtime \
+  python scripts/run_ntfy_heartbeat.py pause
+
+docker run --rm --user "$(id -u):$(id -g)" --env-file .env \
+  -v "$PWD/.state:/app/.state" smart-home-qa-harness:runtime \
+  python scripts/run_ntfy_heartbeat.py resume
+```
+
+Each invocation logs one redacted JSON event. A failed renewal exits non-zero
+and never advances the persisted successful deadline. When the Pi returns
+after a deadline, it emits one recovery notification and renews the next
+scheduled alert.
+
 ### Controlled release and rollback
 
 Develop on a feature branch, run the full quality gate, and merge the reviewed change into `main`. Build releases from the clean, tested main commit using a commit-specific image tag. Validate the candidate before changing `runtime`.
