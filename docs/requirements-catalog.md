@@ -56,7 +56,6 @@ These requirements describe the current uncommitted branch work observed on 2026
 | `REQ-VNT-006` | Compare indoor and outdoor moisture before recommending humidity ventilation | Ventilation | README roadmap | [#27](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/27) |
 | `REQ-VNT-007` | Remind residents to close windows after short ventilation | Ventilation | README roadmap | [#28](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/28) |
 | `REQ-HEAT-008` | Apply a scheduled bathroom comfort-heating profile | Heating | Product idea | [#29](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/29) |
-| `REQ-HEAT-009` | Apply configurable nighttime bedroom temperature profiles | Heating | Product idea | [#30](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/30) |
 | `REQ-HEAT-010` | Integrate installed SwitchBot radiator thermostats | Heating | README roadmap | [#31](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/31) |
 | `REQ-HEAT-011` | Run guarded scheduled heating control across multiple zones | Heating | Multi-zone rollout | [#46](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/46) |
 | `REQ-HUM-003` | Detect probable low water from calibrated humidifier power | Humidifier | Branch roadmap | [#32](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/32) |
@@ -75,6 +74,12 @@ These requirements describe the current uncommitted branch work observed on 2026
 | ID | Requirement | Evidence summary | GitHub Issue |
 |---|---|---|---|
 | `REQ-NTF-005` | Deliver operational failure and recovery notifications through ntfy | Authenticated JSON delivery, Portuguese failure/recovery messages, redacted delivery outcomes, and deterministic adapter/runner tests | [#52](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/52) |
+
+## In progress on `codex/30-zone-temperature-profiles`
+
+| ID | Requirement | Evidence summary | GitHub Issue |
+|---|---|---|---|
+| `REQ-HEAT-009` | Apply configurable daily temperature profiles per heating zone | Local-time transitions, fixed-target fallback, configurable safety floor, operational target logging, unit and BDD boundary tests | [#30](https://github.com/lucasbezerranegot/smart-home-qa-harness/issues/30) |
 
 ## Withdrawn or superseded
 

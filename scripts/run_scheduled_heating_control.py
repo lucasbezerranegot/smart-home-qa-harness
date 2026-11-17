@@ -91,6 +91,11 @@ def main(environ=None, now_factory=None) -> int:
                 state={
                     "previous": getattr(result.previous_state, "value", None),
                     "desired": getattr(result.desired_state, "value", None),
+                    "target_temperature": (
+                        zone.configuration_at(
+                            current_datetime
+                        ).target_temperature
+                    ),
                 },
             )
             cycle_failed = cycle_failed or result.error_code is not None
