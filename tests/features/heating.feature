@@ -43,3 +43,15 @@ Feature: Control heating using the associated Meter
     And the relay is "OFF"
     When the heating control evaluates the available Meter readings
     Then the relay should be "ON"
+
+  Scenario Outline: Select a zone target from its daily local-time profile
+    Given a heating zone with the profile "00:00=18,05:30=20,22:00=18"
+    When the profile is evaluated at "<local_time>" in Europe/Berlin
+    Then the heating target should be <expected_target> degrees Celsius
+
+    Examples:
+      | local_time | expected_target |
+      | 05:29      | 18              |
+      | 05:30      | 20              |
+      | 21:59      | 20              |
+      | 22:00      | 18              |

@@ -1,8 +1,10 @@
 """Operational wiring for SwitchBot Meter-to-relay heating control."""
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass, replace
+from datetime import datetime, time, timedelta, timezone
+import math
+import re
 import uuid
 
 from smart_home_qa_harness.heating_control import HeatingConfiguration
@@ -28,6 +30,35 @@ from smart_home_qa_harness.switchbot_relay_client import (
 class HeatingZone:
     name: str
     configuration: HeatingConfiguration
+    temperature_profile: tuple["TemperatureProfileEntry", ...] = ()
+
+    def configuration_at(self, current_datetime: datetime) -> HeatingConfiguration:
+        """Return the zone configuration for the current local wall-clock time."""
+
+        if current_datetime.tzinfo is None:
+            raise HeatingApplicationConfigurationError(
+                "INVALID_CURRENT_DATETIME",
+                "Current datetime must include timezone information.",
+            )
+        if not self.temperature_profile:
+            return self.configuration
+
+        current_time = current_datetime.time().replace(tzinfo=None)
+        active_entry = self.temperature_profile[-1]
+        for entry in self.temperature_profile:
+            if entry.starts_at > current_time:
+                break
+            active_entry = entry
+        return replace(
+            self.configuration,
+            target_temperature=active_entry.target_temperature,
+        )
+
+
+@dataclass(frozen=True, order=True)
+class TemperatureProfileEntry:
+    starts_at: time
+    target_temperature: float
 
 
 @dataclass(frozen=True)
@@ -161,7 +192,7 @@ def run_switchbot_heating_zone(
             "Current datetime must include timezone information.",
         )
 
-    heating_config = zone.configuration
+    heating_config = zone.configuration_at(current_datetime)
     timestamp_ms = int(current_datetime.timestamp() * 1000)
     retrieved_at = current_datetime.astimezone(timezone.utc).isoformat()
 
@@ -218,16 +249,57 @@ def run_switchbot_heating_zone(
 
 def _load_zone(environ: Mapping[str, str], index: int) -> HeatingZone:
     prefix = f"HEATING_ZONE_{index}"
+    minimum_target = float(
+        environ.get("HEATING_MINIMUM_TARGET_TEMPERATURE", "16")
+    )
+    fixed_target = float(environ[f"{prefix}_TARGET_TEMPERATURE"])
+    temperature_profile = _parse_temperature_profile(
+        environ.get(f"{prefix}_TEMPERATURE_PROFILE", ""),
+        minimum_target=minimum_target,
+    )
+    if not math.isfinite(minimum_target) or fixed_target < minimum_target:
+        raise ValueError("Heating target is below the configured safety minimum.")
     return HeatingZone(
         name=environ[f"{prefix}_NAME"].strip(),
         configuration=HeatingConfiguration(
             relay_id=environ[f"{prefix}_RELAY_ID"],
             channel=int(environ[f"{prefix}_CHANNEL"]),
             meter_id=environ[f"{prefix}_METER_ID"],
-            target_temperature=float(environ[f"{prefix}_TARGET_TEMPERATURE"]),
+            target_temperature=fixed_target,
             hysteresis=float(environ[f"{prefix}_HYSTERESIS"]),
         ),
+        temperature_profile=temperature_profile,
     )
+
+
+def _parse_temperature_profile(
+    raw_profile: str,
+    minimum_target: float,
+) -> tuple[TemperatureProfileEntry, ...]:
+    if not raw_profile.strip():
+        return ()
+    if not math.isfinite(minimum_target):
+        raise ValueError("Heating safety minimum must be finite.")
+
+    entries: list[TemperatureProfileEntry] = []
+    seen_times: set[time] = set()
+    for raw_entry in raw_profile.split(","):
+        parts = raw_entry.strip().split("=")
+        if len(parts) != 2:
+            raise ValueError("Temperature profile entries must use HH:MM=target.")
+        start_text, target_text = parts
+        if re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", start_text) is None:
+            raise ValueError("Temperature profile times must use HH:MM.")
+        starts_at = time.fromisoformat(start_text)
+        if starts_at in seen_times:
+            raise ValueError("Temperature profile times must be unique.")
+        target = float(target_text)
+        if not math.isfinite(target) or target < minimum_target:
+            raise ValueError("Temperature profile target is below the safety minimum.")
+        seen_times.add(starts_at)
+        entries.append(TemperatureProfileEntry(starts_at, target))
+
+    return tuple(sorted(entries))
 
 
 def _zone_is_enabled(environ: Mapping[str, str], index: int) -> bool:

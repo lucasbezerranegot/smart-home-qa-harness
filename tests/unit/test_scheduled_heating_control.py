@@ -69,8 +69,25 @@ def test_runs_single_scheduled_zone_non_interactively(run_zone, capsys):
     assert event["command_status"] == "succeeded"
     assert "relay_id" not in event
     assert "meter_id" not in event
+    assert event["state"]["target_temperature"] == 20
     assert events[1]["home"] == "home"
     assert events[1]["decision"] == "completed"
+
+
+@patch("scripts.run_scheduled_heating_control.run_switchbot_heating_zone")
+def test_reports_active_profile_target_in_operational_event(run_zone, capsys):
+    environ = environment()
+    environ["HEATING_ZONE_6_TEMPERATURE_PROFILE"] = (
+        "19:00=17,02:00=18,07:00=20"
+    )
+    run_zone.return_value = result()
+    now = datetime(2026, 11, 17, 19, 0, tzinfo=timezone.utc)
+
+    exit_code = main(environ, now_factory=lambda: now)
+
+    assert exit_code == 0
+    event = json.loads(capsys.readouterr().out.splitlines()[0])
+    assert event["state"]["target_temperature"] == 17
 
 
 @patch("scripts.run_scheduled_heating_control.run_switchbot_heating_zone")

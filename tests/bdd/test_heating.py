@@ -1,5 +1,12 @@
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from pytest_bdd import given, parsers, scenarios, then, when
 
+from smart_home_qa_harness.heating_application import (
+    HeatingZone,
+    TemperatureProfileEntry,
+)
 from smart_home_qa_harness.heating_control import (
     HeatingConfiguration,
     decide_relay_state,
@@ -136,6 +143,66 @@ def evaluate_available_readings(
         readings=available_readings,
         previous_state=previous_state,
     )
+
+
+# Steps used by the daily temperature-profile scenarios
+
+
+@given(
+    parsers.parse('a heating zone with the profile "{profile}"'),
+    target_fixture="profiled_zone",
+)
+def profiled_zone(profile):
+    entries = tuple(
+        TemperatureProfileEntry(
+            starts_at=datetime.strptime(start, "%H:%M").time(),
+            target_temperature=float(target),
+        )
+        for start, target in (
+            item.split("=") for item in profile.split(",")
+        )
+    )
+    return HeatingZone(
+        name="bedroom",
+        configuration=HeatingConfiguration(
+            relay_id="bedroom-relay",
+            channel=1,
+            meter_id="bedroom-meter",
+            target_temperature=20,
+            hysteresis=0.5,
+        ),
+        temperature_profile=entries,
+    )
+
+
+@when(
+    parsers.parse(
+        'the profile is evaluated at "{local_time}" in Europe/Berlin'
+    ),
+    target_fixture="active_heating_target",
+)
+def evaluate_profile(profiled_zone, local_time):
+    hour, minute = (int(value) for value in local_time.split(":"))
+    current_datetime = datetime(
+        2026,
+        11,
+        17,
+        hour,
+        minute,
+        tzinfo=ZoneInfo("Europe/Berlin"),
+    )
+    return profiled_zone.configuration_at(
+        current_datetime
+    ).target_temperature
+
+
+@then(
+    parsers.parse(
+        "the heating target should be {expected_target:g} degrees Celsius"
+    )
+)
+def verify_heating_target(active_heating_target, expected_target):
+    assert active_heating_target == expected_target
 
 
 # Shared assertion

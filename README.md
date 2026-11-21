@@ -539,6 +539,23 @@ incompletely configured scheduled zones fail closed before any command is
 sent. Enabled zones not present in the allowlist are not evaluated. Duplicate
 zone names and duplicate Relay ID/channel assignments are also rejected.
 
+Each zone may optionally replace its fixed target with a daily wall-clock
+profile. Entries use local time in `HH:MM=target` form and repeat every day:
+
+```text
+HEATING_MINIMUM_TARGET_TEMPERATURE=16
+HEATING_ZONE_5_TEMPERATURE_PROFILE=00:00=18,05:30=20,22:00=18
+HEATING_ZONE_6_TEMPERATURE_PROFILE=00:00=17,02:00=18,07:00=20,19:00=17
+```
+
+The active entry is the latest transition at or before the current local time;
+before the first transition, the last entry from the previous day remains
+active. An empty profile keeps `HEATING_ZONE_*_TARGET_TEMPERATURE` active all
+day. Malformed profiles, duplicate transition times, non-finite values, and
+targets below `HEATING_MINIMUM_TARGET_TEMPERATURE` fail closed before any relay
+command. With the standard `0.5` °C hysteresis, a target of `18` °C turns the
+heater on at `17.5` °C and off at `18` °C.
+
 Each execution evaluates every scheduled zone independently and writes one
 versioned JSON result per zone to the systemd journal. A failure in one zone does not
 prevent the remaining zones from reaching a safe decision, but the process
